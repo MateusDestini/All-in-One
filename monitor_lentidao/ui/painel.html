@@ -584,13 +584,14 @@
   table.ram-bios { table-layout: fixed; }
   table.ram-bios td, table.ram-bios th { padding: 5px 4px; vertical-align: middle; }
   table.ram-bios th:nth-child(2), table.ram-bios th:nth-child(3) { width: 76px; }
-  table.ram-bios th:last-child { width: 96px; }
+  table.ram-bios th:last-child { width: 112px; }
   table.ram-bios td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   table.ram-bios th:first-child { color: var(--text); font-weight: 600; }
   table.ram-bios td.num { font-family: var(--mono); }
   table.ram-bios .faixa { font-size: 11px; color: var(--dim); font-weight: 400; margin-top: 1px; white-space: normal; }
-  table.ram-bios input { width: 84px; padding: 5px 8px; font-family: var(--mono); text-align: right; }
-  table.ram-bios input.mudou { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  table.ram-bios input, table.ram-bios select { width: 104px; padding: 5px 8px; font-family: var(--mono); text-align: right; }
+  table.ram-bios select { padding: 5px 4px; }
+  table.ram-bios input.mudou, table.ram-bios select.mudou { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   details.ram-bios-mais summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
   table.ram-canais td.dif { color: var(--aviso); font-weight: 700; }
   .ram-pentes { margin-top: 10px; font-size: 12.5px; }
@@ -3010,7 +3011,19 @@ async function carregarRamBios(forcar) {
   const el = document.getElementById("ram-bios");
   if (el) el.innerHTML = ramBiosHtml();
 }
-const fmtMv = (k, v) => v == null ? "—" : TENSAO_BIOS.has(k) ? `${fmtN((v / 1000).toFixed(2))} V` : String(v);
+// unidade=true no texto corrido (confirmação); na tabela a unidade fica na linha de baixo
+const fmtMv = (k, v, unidade) => v == null ? "—" : TENSAO_BIOS.has(k) ? `${fmtN((v / 1000).toFixed(2))} V`
+  : k === "mclk" ? `${v * 2}${unidade ? " MT/s" : ""}` : k === "fclk" ? (v ? `${v}${unidade ? " MHz" : ""}` : "Auto")
+  : k === "uclk1" ? (v ? "1:1" : "1:2") : String(v);
+function ramBiosRodando(k, a) {
+  if (!a || !a.ok) return null;
+  const c = a.clocks || {};
+  if (k === "mclk") return c.mclk ? Math.round(c.mclk) : a.mts ? a.mts / 2 : null;
+  if (k === "fclk") return c.fclk ? Math.round(c.fclk) : null;
+  if (k === "uclk1") return c.modo_uclk ? (c.modo_uclk === "1:1" ? 1 : 0) : null;
+  if (TENSAO_BIOS.has(k)) return null;
+  return (a.timings || {})[k] ?? null;
+}
 function ramBiosConferenciaHtml(c) {
   if (!c) return "";
   if (c.pendente) {
@@ -3043,7 +3056,7 @@ function ramBiosHtml() {
     }[b.motivo] || [`Não consegui falar com a BIOS${b.erro ? `: ${esc(b.erro)}` : "."}`, ""];
     return `<div class="caixa"><div class="sub" style="line-height:1.55">${txt[0]}</div>${txt[1] ? `<div class="oc-acoes">${txt[1]}</div>` : ""}</div>`;
   }
-  const t = (ramDados && ramDados.atual && ramDados.atual.ok && ramDados.atual.timings) || {};
+  const atualRam = ramDados && ramDados.atual;
   const disp = new Set(b.itens.map(i => i.chave));
   const niveis = ((ramDados && ramDados.sugestoes && ramDados.sugestoes.niveis) || []).filter(n => n.valores && Object.keys(n.valores).length);
   const mudancas = ramBiosMudancas();
@@ -3052,10 +3065,17 @@ function ramBiosHtml() {
     if (!itens.length) return "";
     const linhas = itens.map(i => {
       const novo = ramBiosNovo[i.chave] ?? i.atual, mudou = novo !== "" && Number(novo) !== i.atual, v = TENSAO_BIOS.has(i.chave);
-      const faixa = `${fmtMv(i.chave, i.min)} a ${fmtMv(i.chave, i.teto)}${i.passo > 1 && !v ? ` · de ${i.passo} em ${i.passo}` : ""}${i.teto < i.max ? " · teto do monitor" : ""}`;
-      return `<tr title="${esc(faixa)}"><td><b>${esc(i.rotulo)}</b><div class="faixa">${faixa}</div></td><td class="num">${fmtMv(i.chave, i.atual)}</td><td class="num">${v ? "—" : t[i.chave] ?? "—"}</td>
-        <td><input type="number" class="busca ${mudou ? "mudou" : ""}" value="${novo === "" ? "" : v ? (novo / 1000).toFixed(2) : novo}"
-          min="${v ? i.min / 1000 : i.min}" max="${v ? i.teto / 1000 : i.teto}" step="${v ? i.passo / 1000 : i.passo}" onchange="mudarRamBios('${i.chave}', this)"></td></tr>`;
+      const rod = ramBiosRodando(i.chave, atualRam);
+      const lista = i.tipo === "lista";
+      const faixa = i.chave === "uclk1" ? "1:1 é o normal até 6400 MT/s"
+        : lista ? `${fmtMv(i.chave, i.min)} a ${fmtMv(i.chave, i.teto, true)}`
+        : `${fmtMv(i.chave, i.min)} a ${fmtMv(i.chave, i.teto)}${i.passo > 1 && !v ? ` · de ${i.passo} em ${i.passo}` : ""}${i.teto < i.max ? " · teto do monitor" : ""}`;
+      const campo = lista
+        ? `<select class="busca ${mudou ? "mudou" : ""}" onchange="mudarRamBios('${i.chave}', this)">${i.opcoes.map(o => `<option value="${o}" ${Number(novo) === o ? "selected" : ""}>${fmtMv(i.chave, o)}</option>`).join("")}</select>`
+        : `<input type="number" class="busca ${mudou ? "mudou" : ""}" value="${novo === "" ? "" : v ? (novo / 1000).toFixed(2) : novo}"
+          min="${v ? i.min / 1000 : i.min}" max="${v ? i.teto / 1000 : i.teto}" step="${v ? i.passo / 1000 : i.passo}" onchange="mudarRamBios('${i.chave}', this)">`;
+      return `<tr title="${esc(faixa)}"><td><b>${esc(i.rotulo)}</b><div class="faixa">${faixa}</div></td><td class="num">${fmtMv(i.chave, i.atual)}</td><td class="num">${rod == null ? "—" : lista ? fmtMv(i.chave, rod) : rod}</td>
+        <td>${campo}</td></tr>`;
     }).join("");
     const tabela = `<table class="aida ram-bios"><tr><th>${esc(g)}</th><th>Na BIOS</th><th>Rodando</th><th>Novo</th></tr>${linhas}</table>`;
     if (g !== "Turnaround") return tabela;
@@ -3067,8 +3087,8 @@ function ramBiosHtml() {
       ${niveis.length ? `<div class="oc-acoes" style="margin-top:10px;align-items:center"><span class="sub" style="margin:0">Preencher com:</span>${niveis.map(n => `<button class="botao" onclick="preencherRamBios('${n.id}')">${esc(n.nome)}</button>`).join("")}<button class="botao" onclick="ramBiosNovo={};ramBiosOrigem='';carregarRamBios()">Limpar</button></div>` : ""}
       <div id="ram-bios-fora" class="sub" style="margin-top:6px">${ramBiosFora(niveis, disp)}</div>
       <div class="ram-bios-grade">
-        <div class="ram-col">${grupo("Primários")}${grupo("Refresh")}${grupo("Tensões")}</div>
-        <div class="ram-col">${grupo("Secundários")}${grupo("Turnaround")}</div>
+        <div class="ram-col">${grupo("Frequência")}${grupo("Primários")}${grupo("Refresh")}</div>
+        <div class="ram-col">${grupo("Secundários")}${grupo("Tensões")}${grupo("Turnaround")}</div>
       </div>
       <div class="oc-acoes">
         <button class="botao primario" onclick="aplicarRamBios()" id="ram-bios-aplicar" ${mudancas.length ? "" : "disabled"}>${mudancas.length ? `Gravar ${mudancas.length} ${mudancas.length > 1 ? "ajustes" : "ajuste"} para o próximo boot` : "Mude algum valor para gravar"}</button>
@@ -3080,7 +3100,8 @@ function ramBiosFora(niveis, disp) {
   if (!ramBiosOrigem) return "";
   const n = niveis.find(x => x.nome === ramBiosOrigem);
   const fora = n ? Object.keys(n.valores).filter(k => !disp.has(k)) : [];
-  return `Preenchido com o nível ${esc(ramBiosOrigem)}.${fora.length ? ` Fica só pela BIOS: ${fora.map(k => NOMES_T[k] || k.toUpperCase()).join(", ")}.` : ""} O nível 1 (EXPO, UCLK e FCLK) continua sendo na BIOS.`;
+  const semFreq = !disp.has("mclk") ? " A frequência, o UCLK e o FCLK do nível 1 continuam sendo na BIOS." : "";
+  return `Preenchido com o nível ${esc(ramBiosOrigem)}.${fora.length ? ` Fica só pela BIOS: ${fora.map(k => NOMES_T[k] || k.toUpperCase()).join(", ")}.` : ""}${semFreq}`;
 }
 function ramBiosMudancas() {
   if (!ramBios || !ramBios.itens) return [];
@@ -3100,7 +3121,11 @@ function preencherRamBios(id) {
   ramBiosNovo = {};
   for (const [k, v] of Object.entries(n.valores)) {
     const i = ramBios.itens.find(x => x.chave === k);
-    if (i) ramBiosNovo[k] = Math.min(i.teto, Math.max(i.min, i.min + Math.round((v - i.min) / i.passo) * i.passo));
+    if (!i) continue;
+    if (i.tipo === "lista") {
+      const ops = i.opcoes.filter(o => o || k === "uclk1");
+      ramBiosNovo[k] = ops.reduce((a, o) => Math.abs(o - v) < Math.abs(a - v) ? o : a, ops[0]);
+    } else ramBiosNovo[k] = Math.min(i.teto, Math.max(i.min, i.min + Math.round((v - i.min) / i.passo) * i.passo));
   }
   ramBiosOrigem = n.nome;
   document.getElementById("ram-bios").innerHTML = ramBiosHtml();
@@ -3108,8 +3133,10 @@ function preencherRamBios(id) {
 function aplicarRamBios() {
   const lista = ramBiosMudancas();
   if (!lista.length) return;
-  const resumo = lista.map(([i, v]) => `${i.rotulo}: ${fmtMv(i.chave, i.atual)} → ${fmtMv(i.chave, v)}`).join("\n");
-  confirmar("Gravar na BIOS?", `${resumo}\n\nVale depois de reiniciar. Os valores de antes ficam guardados para desfazer. Se o PC não ligar, a placa tenta de novo e volta sozinha; no pior caso, limpe a CMOS.`, "Gravar", async () => {
+  const resumo = lista.map(([i, v]) => `${i.rotulo}: ${fmtMv(i.chave, i.atual, true)} → ${fmtMv(i.chave, v, true)}`).join("\n");
+  const treino = lista.some(([i]) => i.chave === "mclk" || i.chave === "uclk1")
+    ? "\n\nCom a velocidade nova, o primeiro boot pode ficar 1 a 2 minutos com a tela preta enquanto a placa treina a memória. Não desligue no meio." : "";
+  confirmar("Gravar na BIOS?", `${resumo}${treino}\n\nVale depois de reiniciar. Os valores de antes ficam guardados para desfazer. Se o PC não ligar, a placa tenta de novo e volta sozinha; no pior caso, limpe a CMOS.`, "Gravar", async () => {
     const r = await api().ram_bios_aplicar(Object.fromEntries(lista.map(([i, v]) => [i.chave, Number(v)])), ramBiosOrigem || "manual");
     toast(r.mensagem + (r.avisos && r.avisos.length ? " " + r.avisos.join(" ") : ""));
     if (r.ok) { ramBiosNovo = {}; ramBiosOrigem = ""; }

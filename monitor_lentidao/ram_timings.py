@@ -813,7 +813,16 @@ def sugestoes(k: dict, atual: dict, plat: dict, latencia_medida: float | None = 
     n1 = {"mts": alvo_mts, "cl": cl1, "trcd": trcd1, "trp": trcd1, "trfc": ciclos(trfc_jedec),
           "trefi": ciclos(3900 if tipo == "DDR5" else 7800), "modo_uclk": "1:1" if am5 else None,
           "fclk": 2000 if am5 else (alvo_mts // 2 if am4 else None)}
-    niveis.append({"id": "perfil", "nome": "Perfil do fabricante", "risco": "seguro", "itens": itens, "valores": {},
+    # o mesmo, para gravar pela BIOS (aod.py): frequência, 1:1, FCLK e, se o código do kit disse, os primários
+    valores1 = {}
+    if plat.get("marca") == "amd" and (am5 or am4):
+        valores1 = {"mclk": alvo_mts // 2, "fclk": n1["fclk"] if alvo_mts <= (6400 if am5 else 3800) else None}
+        if am5:
+            valores1["uclk1"] = 1
+        if r.get("perfil_cl"):
+            valores1.update(cl=cl1, trcd=trcd1, trp=trcd1)
+        valores1 = {k: v for k, v in valores1.items() if v is not None}
+    niveis.append({"id": "perfil", "nome": "Perfil do fabricante", "risco": "seguro", "itens": itens, "valores": valores1,
                    "texto": "O que o kit promete de fábrica, com os ajustes de plataforma que quase todo PC aguenta.",
                    "estimativa": _estimar(base, n1, latencia_medida)})
 

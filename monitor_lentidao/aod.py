@@ -47,8 +47,22 @@ MAPA = {
     "settrdwr": ("trdwr", "tRDWR", "Turnaround"), "settwrrd": ("twrrd", "tWRRD", "Turnaround"),
     "setvddio": ("vdd", "VDD (memória)", "Tensões"), "setdimmvddq": ("vddq", "VDDQ", "Tensões"),
     "setvpp": ("vpp", "VPP", "Tensões"),
+    # estas a BIOS dá como lista de opções (Getdvalues), não como faixa
+    "setmemclock": ("mclk", "Velocidade", "Frequência"), "setfclkfrequency": ("fclk", "FCLK", "Frequência"),
+    "setuclkdiv1": ("uclk1", "UCLK 1:1", "Frequência"),
 }
-GRUPOS = ("Primários", "Refresh", "Secundários", "Turnaround", "Tensões")
+GRUPOS = ("Frequência", "Primários", "Refresh", "Secundários", "Turnaround", "Tensões")
+LISTAS = {"mclk", "fclk", "uclk1"}
+
+
+def faixa_segura(chave: str, ddr5: bool) -> tuple[int, int]:
+    """Das opções da BIOS, o que o monitor deixa escolher. DDR5 (AM5): até 6400 MT/s, que é o limite do controlador
+    em 1:1, e FCLK até 2200 MHz. DDR4 (AM4): até 3800 MT/s e FCLK até 1900 MHz."""
+    if chave == "mclk":
+        return (2000, 3200) if ddr5 else (800, 1900)
+    if chave == "fclk":
+        return (1600, 2200) if ddr5 else (1200, 1900)
+    return (0, 1)
 TENSOES = {"vdd", "vddq", "vpp"}
 TETO_MV = {"vdd": 1450, "vddq": 1450, "vpp": 1900}  # abaixo do máximo da BIOS: acima disso só com refrigeração nos pentes
 INICIO, FIM, RESET = "commandbufferstart", "commandbufferend", "resetmempara"
@@ -78,6 +92,10 @@ foreach ($m in 'GetObjectID', 'GetObjectID2') {
     $id = [uint32]$p.ID[$i]; $f = @{ id = [int64]$id; nome = [string]$p.IDString[$i] }
     try { $q = $o.GetMinMaxSteppingValues($id).pack
           $f.atual = [int64]$q.Current; $f.min = [int64]$q.Min; $f.max = [int64]$q.Max; $f.passo = [int64]$q.Stepping } catch {}
+    if (-not $f.max -and $f.nome -match 'Mem Clock|FCLK Freq|UCLK DIV1') {
+      try { $d = $o.Getdvalues($id).pack; $n = [int]$d.Length
+            if ($n -gt 0) { $f.atual = [int64]$d.Current; $f.opcoes = @(@($d.DValuesBuffer)[0..($n - 1)] | ForEach-Object { [int64]$_ }) } } catch {}
+    }
     $r.funcoes += $f
   }
 }
@@ -158,10 +176,26 @@ def interpretar(bruto: dict) -> dict:
     if isinstance(funcoes, dict):
         funcoes = [funcoes]
     especiais, itens = {}, []
+    mclk = next((f.get("atual") for f in funcoes if _norm(f.get("nome")) == "setmemclock"), None)
+    tcl = next((f.get("max") for f in funcoes if _norm(f.get("nome")) == "settcl"), None)
+    ddr5 = (mclk or 0) >= 2000 or (not mclk and (tcl or 0) > 40)
     for f in funcoes:
         n = _norm(f.get("nome"))
         if n in (INICIO, FIM, RESET):
             especiais[n] = int(f["id"])
+        elif n in MAPA and MAPA[n][0] in LISTAS:
+            chave, rotulo, grupo = MAPA[n]
+            todas = [int(x) for x in (f.get("opcoes") or []) if isinstance(x, (int, float))]
+            atual = f.get("atual")
+            lo, hi = faixa_segura(chave, ddr5)
+            seguras = sorted({x for x in todas if lo <= x <= hi})
+            if chave == "fclk" and atual == 0:
+                seguras = [0] + seguras  # 0 = automático
+            if len(seguras) < 2:
+                continue
+            itens.append({"chave": chave, "rotulo": rotulo, "grupo": grupo, "id": int(f["id"]), "nome": f.get("nome"),
+                          "atual": atual, "tipo": "lista", "opcoes": seguras, "opcoes_bios": todas,
+                          "min": min(x for x in seguras if x) if any(seguras) else 0, "max": max(todas), "teto": max(seguras), "passo": None})
         elif n in MAPA:
             chave, rotulo, grupo = MAPA[n]
             mn, mx, passo = f.get("min"), f.get("max"), f.get("passo")
@@ -194,6 +228,13 @@ def validar(lista: dict, mudancas: dict, atual_umc: dict | None = None, livre: b
             continue
         if v == item.get("atual"):
             continue
+        if item.get("tipo") == "lista":
+            if v in item["opcoes"] or (livre and (v in item["opcoes_bios"] or v == 0)):
+                aceitos[chave] = v
+            else:
+                erros.append(f"{item['rotulo']}: {_mostrar(chave, v)} não está entre as opções que o monitor deixa escolher "
+                             f"({_mostrar(chave, item['min'])} a {_mostrar(chave, item['teto'])}).")
+            continue
         teto = item["max"] if livre else item["teto"]
         if v < item["min"] or v > teto:
             limite = f"{item['min']} a {teto}" + (" mV" if chave in TENSOES else "")
@@ -222,7 +263,26 @@ def validar(lista: dict, mudancas: dict, atual_umc: dict | None = None, livre: b
         avisos.append("VDD e VDDQ muito diferentes (mais de 0,1 V): o normal é andarem juntos.")
     if any(c in aceitos for c in ("vdd", "vddq")) and max(vdd or 0, vddq or 0) > 1400:
         avisos.append("Acima de 1,40 V os pentes esquentam bastante: deixe um ventilador soprando neles.")
+    if "mclk" in aceitos:
+        avisos.append("Com a frequência nova a placa treina a memória do zero: o primeiro boot pode ficar 1 a 2 minutos com a tela "
+                      "preta. Não desligue no meio.")
+        if aceitos["mclk"] >= 3000 and vdd and vdd < 1300:
+            avisos.append(f"{aceitos['mclk'] * 2} MT/s costuma pedir 1,35 V nos pentes (veja na caixa do kit); a BIOS está em {vdd / 1000:.2f} V.".replace(".", ",", 1))
+    if aceitos.get("fclk", 0) > 2100:
+        avisos.append("FCLK acima de 2100 MHz nem todo processador aguenta: rode o teste de estabilidade depois.")
+    if aceitos.get("uclk1") == 0:
+        avisos.append("Desligar o 1:1 deixa o controlador na metade da velocidade: mais latência. Só vale acima de 6400 MT/s.")
     return aceitos, erros, avisos
+
+
+def _mostrar(chave: str, v) -> str:
+    if chave == "mclk":
+        return f"{v * 2} MT/s"
+    if chave == "fclk":
+        return f"{v} MHz" if v else "automático"
+    if chave == "uclk1":
+        return "1:1" if v else "1:2"
+    return str(v)
 
 
 # ------------------------------------------------------------------ gravação
@@ -273,7 +333,7 @@ def aplicar(mudancas: dict, atual_umc: dict | None = None, origem: str = "", liv
     comandos = [(ids[INICIO], 0)] + [(por_chave[c]["id"], v) for c, v in aceitos.items()] + [(ids[FIM], 0)]
 
     pendente = _ler_json("aod_pendente.json") or {}
-    antes = pendente.get("antes") or {i["chave"]: i["atual"] for i in lista["itens"] if i.get("atual")}
+    antes = pendente.get("antes") or {i["chave"]: i["atual"] for i in lista["itens"] if i.get("atual") is not None}
     if not _ler_json("aod_original.json"):  # a primeira configuração vista fica guardada para sempre
         _gravar_json("aod_original.json", {"quando": time.time(), "valores": antes})
     r = _executar(comandos)
@@ -342,14 +402,14 @@ def conferir_depois_do_boot(atual_umc: dict) -> dict | None:
         return {"pendente": True, **pendente}  # ainda não reiniciou
     if not atual_umc or not atual_umc.get("ok"):
         return {"pendente": True, "sem_leitura": True, **pendente}
-    t = atual_umc.get("timings") or {}
     detalhes = []
     for chave, v in (pendente.get("pedido") or {}).items():
-        if chave in TENSOES:
-            continue  # o controlador não mostra a tensão
-        agora = t.get(chave)
+        if chave in TENSOES or (chave == "fclk" and not v):
+            continue  # o controlador não mostra a tensão; FCLK automático não tem número para comparar
+        agora = _rodando(chave, atual_umc)
         if agora is not None:
-            detalhes.append({"chave": chave, "pedido": v, "agora": agora, "entrou": agora == v})
+            entrou = abs(agora - v) <= max(10, v * 0.01) if chave in ("mclk", "fclk") else agora == v
+            detalhes.append({"chave": chave, "pedido": v, "agora": agora, "entrou": entrou})
     if not detalhes:
         resultado = "padrao" if pendente.get("origem") == "padrão da BIOS" else "sem_conferir"
     elif all(d["entrou"] for d in detalhes):
@@ -384,6 +444,20 @@ def _quedas_depois(conferido_em: float) -> dict:
     contagem = {"quedas_depois": _contar(oc_cpu.quedas_desde, conferido_em), "whea_depois": _contar(oc_cpu.whea_desde, conferido_em)}
     _quedas_cache = (time.time(), conferido_em, contagem)
     return contagem
+
+
+def _rodando(chave: str, umc: dict):
+    """O valor que o controlador de memória está usando agora, na mesma unidade da BIOS."""
+    t, c = umc.get("timings") or {}, umc.get("clocks") or {}
+    if chave == "mclk":
+        v = c.get("mclk") or ((umc.get("mts") or 0) / 2)
+        return round(v) if v else None
+    if chave == "fclk":
+        return round(c["fclk"]) if c.get("fclk") else None
+    if chave == "uclk1":
+        m = c.get("modo_uclk")
+        return None if not m else (1 if m == "1:1" else 0)
+    return t.get(chave)
 
 
 def estado(atual_umc: dict | None, forcar: bool = False) -> dict:

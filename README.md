@@ -107,11 +107,13 @@ o monitor abre um painel mais simples automaticamente.
   tMOD, tSTAG, tPHYRDL), canal a canal, Power Down, ECC e as incoerências (tRC menor que tRAS + tRP, tFAW abaixo de
   4 × tRRD_S...).
   **Gravar na BIOS pelo Windows**: nas placas AMD que trazem a interface AOD (a mesma que o Ryzen Master usa), o
-  monitor lista o que a BIOS deixa mudar (timings primários, secundários, tRFC, turnaround e as tensões VDD, VDDQ e
-  VPP), só aceita valores dentro do mínimo, máximo e passo que a própria BIOS informa (tensões com teto do monitor),
-  preenche com o nível Afinado ou Agressivo, grava para valer no próximo boot, guarda os valores de antes para
-  desfazer, tem a volta ao padrão da BIOS e, depois de reiniciar, confere pelo controlador se os timings entraram e
-  se o PC desligou sem avisar. Frequência da memória, EXPO, FCLK, UCLK e tREFI continuam só na BIOS.
+  monitor lista o que a BIOS deixa mudar (velocidade da memória, FCLK e UCLK 1:1 pelas listas de opções da BIOS,
+  timings primários, secundários, tRFC, turnaround e as tensões VDD, VDDQ e VPP), só aceita valores dentro do mínimo,
+  máximo e passo que a própria BIOS informa (com teto do monitor: até 6400 MT/s e FCLK 2200 MHz no AM5, tensões até
+  1,45 V), preenche com o nível Perfil do fabricante (faz o papel do EXPO), Afinado ou Agressivo, grava para valer no
+  próximo boot, guarda os valores de antes para desfazer, tem a volta ao padrão da BIOS e, depois de reiniciar,
+  confere pelo controlador se tudo entrou e se o PC desligou sem avisar. O que a BIOS não oferece pelo Windows (na
+  placa testada, o tREFI) continua só na BIOS.
   Depois de mudar, o **teste de estabilidade** (5 a 60 min, grava e confere toda a memória livre com padrões feitos
   para pegar timing apertado, mais os erros de hardware do Windows e a temperatura dos pentes) e a medição de
   latência e banda dizem se ficou estável e quanto ganhou. Cada teste fica no histórico com os timings daquele
