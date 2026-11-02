@@ -292,3 +292,88 @@ EXPORTA double dt_medir(const wchar_t *caminho, int64_t bytes, int bloco, int al
     if (erro && !ops) return -1.0;
     return dt > 0 ? (double)ops * bloco / dt : 0.0;
 }
+
+/* ------------------------------------------------------------------ carregamento de jogo
+ * Como um jogo carrega um mapa: um pacote grande lido em sequência e muitos arquivos pequenos (texturas, sons,
+ * scripts) abertos por várias threads. Tudo sem o cache do Windows, para medir o disco e não a RAM. */
+
+static Arq dc_abrir_leitura(const wchar_t *caminho) {
+#ifdef _WIN32
+    return CreateFileW(caminho, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                       FILE_FLAG_NO_BUFFERING | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+#else
+    char c[4096];
+    if (wcstombs(c, caminho, sizeof c) == (size_t)-1) return ARQ_INVALIDO;
+    int a = -1;
+#ifdef O_DIRECT
+    a = open(c, O_RDONLY | O_DIRECT);
+#endif
+    if (a < 0) a = open(c, O_RDONLY);  /* tmpfs e afins não aceitam O_DIRECT */
+    return a;
+#endif
+}
+
+/* Lê o arquivo inteiro em blocos de 4 MiB. Devolve os segundos (negativo se deu erro). */
+EXPORTA double dc_ler_pacote(const wchar_t *caminho, int64_t bytes) {
+    const uint32_t bloco = 4u << 20;
+    uint8_t *buf = dt_buffer(bloco);
+    if (!buf) return -1.0;
+    Arq a = dc_abrir_leitura(caminho);
+    if (a == ARQ_INVALIDO) { dt_libera(buf); return -1.0; }
+    double t0 = agora_s();
+    int ok = 1;
+    for (int64_t pos = 0; ok && pos < bytes; pos += bloco) {
+        uint32_t n = (uint32_t)((bytes - pos) < bloco ? (bytes - pos) : bloco);
+        ok = dt_io(a, buf, n, (uint64_t)pos, 0);
+    }
+    double dt = agora_s() - t0;
+    dt_fechar(a);
+    dt_libera(buf);
+    return ok ? dt : -1.0;
+}
+
+typedef struct {
+    const wchar_t *const *nomes;
+    int n, passo, inicio;
+    uint32_t bytes;
+    int erro;
+} DcFio;
+
+static void dc_executa(DcFio *f) {
+    uint8_t *buf = dt_buffer(f->bytes);
+    if (!buf) { f->erro = 1; return; }
+    for (int i = f->inicio; i < f->n && !f->erro; i += f->passo) {
+        Arq a = dc_abrir_leitura(f->nomes[i]);
+        if (a == ARQ_INVALIDO) { f->erro = 1; break; }
+        if (!dt_io(a, buf, f->bytes, 0, 0)) f->erro = 1;
+        dt_fechar(a);
+    }
+    dt_libera(buf);
+}
+#ifdef _WIN32
+static DWORD WINAPI dc_fio(LPVOID p) { dc_executa((DcFio *)p); return 0; }
+#else
+static void *dc_fio(void *p) { dc_executa((DcFio *)p); return NULL; }
+#endif
+
+/* Abre e lê `n` arquivos de `bytes` cada (múltiplo de 4096) com `fios` threads. Devolve os segundos. */
+EXPORTA double dc_ler_arquivos(const wchar_t *const *nomes, int n, int bytes, int fios) {
+    if (fios < 1) fios = 1;
+    if (fios > 64) fios = 64;
+    DcFio f[64];
+    for (int i = 0; i < fios; i++) f[i] = (DcFio){nomes, n, fios, i, (uint32_t)bytes, 0};
+    double t0 = agora_s();
+#ifdef _WIN32
+    HANDLE h[64];
+    for (int i = 0; i < fios; i++) h[i] = CreateThread(NULL, 0, dc_fio, &f[i], 0, NULL);
+    WaitForMultipleObjects((DWORD)fios, h, TRUE, INFINITE);
+    for (int i = 0; i < fios; i++) CloseHandle(h[i]);
+#else
+    pthread_t h[64];
+    for (int i = 0; i < fios; i++) pthread_create(&h[i], NULL, dc_fio, &f[i]);
+    for (int i = 0; i < fios; i++) pthread_join(h[i], NULL);
+#endif
+    double dt = agora_s() - t0;
+    for (int i = 0; i < fios; i++) if (f[i].erro) return -1.0;
+    return dt;
+}

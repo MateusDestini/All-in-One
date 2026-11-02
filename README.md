@@ -118,6 +118,12 @@ o monitor abre um painel mais simples automaticamente.
   para pegar timing apertado, mais os erros de hardware do Windows e a temperatura dos pentes) e a medição de
   latência e banda dizem se ficou estável e quanto ganhou. Cada teste fica no histórico com os timings daquele
   momento, e o monitor marca a melhor configuração estável.
+- **Drivers**: lista os drivers instalados (com data, versão, fabricante e os que estão com problema), diz se há
+  **driver novo da placa de vídeo** (NVIDIA pelo site oficial, com opção Game Ready ou Studio; AMD e Intel com o link
+  da página oficial), mostra as **atualizações de driver do Windows Update** e o link de suporte da sua placa-mãe.
+  Instalar só acontece quando você manda e pede confirmação: o instalador da NVIDIA só é baixado do site da NVIDIA e
+  só roda com a assinatura digital conferida, e o Windows Update instala só o que você marcar. O **backup** copia
+  todos os drivers de terceiros para `Documentos\Destini-Drivers` (pelo `pnputil`), para reinstalar depois.
 - **Aviso de USB**: notifica quando um pendrive ou outro dispositivo USB é conectado ou removido (dá para desligar
   em Ajustes).
 
@@ -126,6 +132,13 @@ o monitor abre um painel mais simples automaticamente.
 - **Benchmark**: renderiza uma cena 3D por path tracing em todos os núcleos e em 1 núcleo e dá uma nota em pontos
   (estilo Cinebench, mas com nota própria: não dá para comparar com a do Cinebench). Tem o modo de 10 minutos para
   ver se o clock cai com o calor, e histórico.
+- **Benchmark da placa**: mede a placa de vídeo numa janela própria (WebGL 2), em 1080p, 1440p ou 4K e qualidade
+  normal, alta ou extrema. A **cena de jogo** tem vale com rio, dezenas de milhares de árvores, sombra em tempo real,
+  água, nuvens, neblina e pós-processamento HDR com brilho; a de **ray tracing** calcula sombra suave, oclusão de
+  ambiente e reflexos nos shaders (roda em qualquer placa, mas não usa os núcleos de RT nem o DXR, então não se
+  compara com o Port Royal ou com jogos com RTX). Aquece 8 s sem medir e faz 3 passadas de 20 s; a nota é a mediana
+  (FPS × 10), com 1% low, e o resultado diz se dá para confiar (passadas com menos de 3% de diferença) e compara com
+  o último teste igual. Para sozinho se a placa passar de 90 °C.
 - **Simulação de jogo**: 30 mil unidades em dois times, com física, colisão e IA em paralelo e a lógica do jogo na
   thread principal. A nota é o FPS médio e o 1% low que o processador aguenta, sem depender da placa de vídeo.
 - **Estresse**: processador (AVX2/FMA em todos os threads), memória RAM (grava e confere padrões, conta erros) e placa
@@ -166,20 +179,42 @@ O monitor foi feito para não atrapalhar nem um PC lento:
 
 - **Inicialização**: ligar/desligar cada programa (igual ao Gerenciador de Tarefas), remover e restaurar removidos.
 - **Discos**: saúde S.M.A.R.T. (temperatura, desgaste do SSD, horas ligado, erros, falha prevista) e teste de velocidade
-  sem cache (sequencial 1 MB, 4K aleatório e 4K com 8 leituras ao mesmo tempo), com histórico.
+  sem cache (sequencial 1 MB, 4K aleatório e 4K com 8 leituras ao mesmo tempo), com histórico. O **carregamento de
+  mapa** simula um jogo abrindo uma fase: lê um pacote de 512 MB e mil arquivos de 64 KB em 8 threads, sem cache, e
+  dá o tempo de cada parte (os arquivos de teste são apagados no final).
 - **Rede**: latência, jitter e perda até o roteador e a internet, DNS, download/upload (speed.cloudflare.com) e bufferbloat,
   dizendo se o problema é Wi-Fi/rede local ou provedor.
 - **Otimização**: limpar a memória (cache da RAM e memória dos programas), fechar apps de segundo plano
   (OneDrive, Teams, Widgets...) e ajustes do Windows com "Restaurar originais" (Alto desempenho, Modo de Jogo,
-  Game DVR, agendamento de GPU, jogos em janela).
+  Game DVR, agendamento de GPU, jogos em janela e **desligar a aceleração do mouse**, que pede confirmação e
+  volta aos valores de antes pelo mesmo botão ou por "Restaurar originais").
 - **Energia**: plano de energia e saúde da bateria em notebooks.
 - **Windhawk**: mostra se o [Windhawk](https://windhawk.net) está instalado e rodando (e instala pelo winget), lista
   os mods com versão e onde carregam, liga e desliga cada um e avisa quando um mod ligado carrega em **todos os
   programas**, o que pode pesar. Usa o `windhawk-cli` quando existe; senão, o mesmo valor `Disabled` que o Windhawk
   grava (em `HKLM\SOFTWARE\Windhawk\Engine\Mods\<mod>`, por isso precisa do monitor aberto como administrador).
   Mods novos se instalam pelo próprio Windhawk.
+- **Luzes RGB**: uma cor ou efeito para todas as luzes do PC (cor fixa, respirar, arco-íris, ou a cor seguindo a
+  temperatura do processador ou da placa, ou a carga do processador). Fala com o **OpenRGB** (pelo servidor SDK dele,
+  que o monitor abre se estiver instalado), o **Corsair iCUE** (a biblioteca oficial da Corsair só é baixada do
+  GitHub da Corsair quando você pede, e só é usada com a assinatura da Corsair) e o **Razer Synapse** (Chroma).
+  Ao parar, devolve as luzes para o programa do fabricante.
 - **Instalar apps**: Steam, Chrome, Discord, Lightshot, 7-Zip, WinRAR e VLC de uma vez, em silêncio, pelo
   winget (sempre a versão oficial mais recente). Os que já estão instalados aparecem marcados.
+
+## Maker (para quem usa Arduino, ESP32 e afins)
+
+- **Portas COM**: lista as portas e os aparelhos seriais, inclusive os **fantasmas** (que não estão conectados mas
+  ainda seguram um número de porta), remove os fantasmas que você marcar, **libera os números de porta** presos
+  (guarda os de antes para desfazer), mostra quem está segurando uma porta (Arduino IDE, Cura, PuTTY...) e fecha
+  esses programas se você pedir.
+- **Drivers seriais**: diz qual chip USB-serial cada placa usa (CH340, CP210x, FTDI, Prolific) e o que há de errado
+  (driver faltando, erro 10/28/43, Prolific falsificado, FTDI com PID 0000), com o link da página oficial do driver,
+  reinstala o aparelho, remove pacotes de driver serial (com backup antes e "Restaurar"), instala ou atualiza a
+  Arduino IDE pelo winget e limpa o cache dela. Os drivers que vinham dentro do ResetExplode não vêm junto: o monitor
+  manda para o site do fabricante.
+
+Tudo que muda o PC nessas páginas pede confirmação antes, e a maior parte precisa do monitor como administrador.
 
 Algumas ações precisam de administrador; o botão "Abrir como administrador" (em Ajustes) reabre o monitor assim.
 
@@ -273,14 +308,19 @@ O `memteste.dll` do pacote foi compilado a partir do `.c`; para gerar de novo, u
 - `monitor_lentidao/atualizador.py`: atualização sozinha pela release do GitHub
 - `nativo/estavel.c`: testes de estabilidade do processador (por núcleo) e da RAM (timings)
 - `monitor_lentidao/biblioteca.py`: biblioteca de jogos
+- `monitor_lentidao/drivers.py`: drivers, driver novo da placa de vídeo, Windows Update e backup
+- `monitor_lentidao/bench_gpu.py` e `ui/bench_gpu.html`: benchmark da placa de vídeo (cena de jogo e ray tracing)
+- `monitor_lentidao/rgb.py`: luzes RGB (OpenRGB, Corsair iCUE e Razer Chroma)
+- `monitor_lentidao/maker.py`: portas COM e drivers seriais
+- `nativo/discoteste.c`: teste de velocidade do disco e de carregamento de mapa
 - `monitor_lentidao/ui/marca/`: logo Destini (ícone do programa, da bandeja e do menu)
 - `instalador.iss`: instalador (Inno Setup 6)
 
 ## Créditos
 
 As páginas Sistema, Sensores, Placa de vídeo, Benchmark, Estresse, Gargalo, FPS nos jogos, Overlay de FPS,
-NVIDIA/AMD, Biblioteca de jogos, Instalar apps e as
-ferramentas de Inicialização, Discos, Rede, Otimização e Energia foram adaptadas (reescritas em Python) do
+NVIDIA/AMD, Biblioteca de jogos, Instalar apps, Drivers, Benchmark da placa, Luzes RGB, Portas COM, Drivers
+seriais e as ferramentas de Inicialização, Discos, Rede, Otimização e Energia foram adaptadas (reescritas em Python) do
 [ResetExplode](https://github.com/GustavoReset/ResetExplode), licença MIT, © 2026 Gustavo (GustavoReset).
 
 Os sensores usam a LibreHardwareMonitorLib e as bibliotecas DiskInfoToolkit, RAMSPDToolkit e BlackSharp

@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Benchmark da placa de vídeo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; left: 14px; top: 12px; background: rgba(0,0,0,.6); padding: 10px 14px; border-radius: 10px; line-height: 1.55; pointer-events: none; min-width: 250px; }
+  .hud .cena { font-weight: 600; font-size: 14px; }
+  .hud b { font-size: 26px; font-variant-numeric: tabular-nums; }
+  .barra { height: 4px; background: rgba(255,255,255,.18); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .barra div { height: 100%; width: 0; background: #fff; }
+  .dica { position: fixed; right: 14px; bottom: 12px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 8px; color: #ccc; }
+  .erro { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 40px; font-size: 16px; background: #000; }
+</style>
+</head>
+<body>
+<canvas id="tela"></canvas>
+<div class="hud"><div class="cena" id="cena">Preparando...</div><b id="fps">—</b> FPS<br><span id="info"></span><br>
+  <span id="placa" style="color:#aaa"></span><div class="barra"><div id="barra"></div></div></div>
+<div class="dica">Esc ou fechar a janela cancela · não minimize durante o teste</div>
+<script>
+// Configuração colocada pelo monitor.
+const CFG = /*CONFIG*/null || {largura: 640, altura: 360, qualidade: "alta", cenas: ["jogo", "rt"], aquecer: 3, passadas: 3, duracao: 8};
+const api = () => window.pywebview && window.pywebview.api;
+const QUAL = {
+  normal:  {terreno: 256, arvores: 12000, sombra: 2048, msaa: 0, spp: 1, rebatidas: 2},
+  alta:    {terreno: 384, arvores: 30000, sombra: 2048, msaa: 4, spp: 2, rebatidas: 3},
+  extrema: {terreno: 512, arvores: 60000, sombra: 4096, msaa: 4, spp: 4, rebatidas: 4},
+}[CFG.qualidade] || null;
+const NOMES = {jogo: "Cena de jogo", rt: "Ray tracing"};
+const AGUA = 2.0, TAM = 800;
+const SOL = norm([0.55, 0.62, 0.32]);
+
+function norm(v) { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; }
+
+// ------------------------------------------------------------------ matrizes (coluna principal, como o OpenGL)
+const M = {
+  persp(fovy, asp, n, f) { const t = 1 / Math.tan(fovy / 2), r = new Float32Array(16);
+    r[0] = t / asp; r[5] = t; r[10] = (f + n) / (n - f); r[11] = -1; r[14] = 2 * f * n / (n - f); return r; },
+  orto(l, d, b, t, n, f) { const r = new Float32Array(16);
+    r[0] = 2 / (d - l); r[5] = 2 / (t - b); r[10] = -2 / (f - n); r[12] = -(d + l) / (d - l); r[13] = -(t + b) / (t - b); r[14] = -(f + n) / (f - n); r[15] = 1; return r; },
+  olhar(o, a, up) {
+    const z = norm([o[0] - a[0], o[1] - a[1], o[2] - a[2]]);
+    const x = norm([up[1] * z[2] - up[2] * z[1], up[2] * z[0] - up[0] * z[2], up[0] * z[1] - up[1] * z[0]]);
+    const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    const r = new Float32Array(16);
+    r[0] = x[0]; r[4] = x[1]; r[8] = x[2]; r[1] = y[0]; r[5] = y[1]; r[9] = y[2]; r[2] = z[0]; r[6] = z[1]; r[10] = z[2];
+    r[12] = -(x[0] * o[0] + x[1] * o[1] + x[2] * o[2]); r[13] = -(y[0] * o[0] + y[1] * o[1] + y[2] * o[2]);
+    r[14] = -(z[0] * o[0] + z[1] * o[1] + z[2] * o[2]); r[15] = 1; return r;
+  },
+  mul(a, b) { const r = new Float32Array(16);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; }
+    return r; },
+};
+
+// ------------------------------------------------------------------ terreno (CPU): ruído fractal com um vale e um rio
+function hash2(x, z) { let h = Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function ruido2(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z), fx = x - xi, fz = z - zi, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash2(xi, zi), b = hash2(xi + 1, zi), c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const rioX = z => Math.sin(z * 0.008) * 110;
+function altura(x, z) {
+  let h = 0, amp = 1, fr = 0.0055;
+  for (let o = 0; o < 6; o++) { h += amp * ruido2(x * fr + o * 31.7, z * fr - o * 17.3); amp *= 0.5; fr *= 2.07; }
+  h = 8 + (h - 0.95) * 85;
+  const vale = Math.min(1, Math.abs(x - rioX(z)) / 85);
+  return h * (0.12 + 0.88 * vale * vale) - (1 - vale) * 5;
+}
+function semente(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ------------------------------------------------------------------ GLSL comum
+const RUIDO_GLSL = `
+float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float r2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+float fbm2(vec2 p, int n) { float s = 0.0, a = 0.5; for (int i = 0; i < 6; i++) { if (i >= n) break; s += a * r2(p); p = p * 2.03 + 3.1; a *= 0.5; } return s; }`;
+const LUZ_GLSL = `
+uniform vec3 sol; uniform vec3 cam; uniform highp sampler2DShadow sombra; uniform float texel;
+const vec3 SOL_COR = vec3(3.1, 2.85, 2.45);
+const vec3 CEU_AMB = vec3(0.30, 0.40, 0.55);
+float sombraPcf(vec4 l) {
+  vec3 p = l.xyz / l.w * 0.5 + 0.5;
+  if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
+  float s = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture(sombra, vec3(p.xy + vec2(x, y) * texel, p.z - 0.0012));
+  return s / 9.0;
+}
+vec3 corNeblina(vec3 rd) { return mix(vec3(0.55, 0.66, 0.80), vec3(1.25, 1.0, 0.7), pow(max(dot(rd, sol), 0.0), 8.0)); }
+vec3 neblina(vec3 c, vec3 p) { vec3 d = p - cam; float f = 1.0 - exp(-length(d) * 0.0024); return mix(c, corNeblina(normalize(d)), f); }`;
+const CEU_GLSL = `
+vec3 ceu(vec3 rd, float t) {
+  float y = max(rd.y, 0.0);
+  vec3 c = mix(vec3(0.62, 0.72, 0.85), vec3(0.20, 0.38, 0.72), pow(y, 0.55));
+  float s = max(dot(rd, sol), 0.0);
+  c += vec3(1.0, 0.8, 0.55) * pow(s, 12.0) * 0.6 + vec3(30.0, 26.0, 20.0) * smoothstep(0.9993, 0.9997, s);
+  if (rd.y > 0.01) {
+    vec2 q = rd.xz / rd.y * 0.8 + vec2(t * 0.012, 0.0);
+    float n = fbm2(q * 1.4, 5);
+    float nuvem = smoothstep(0.48, 0.78, n) * smoothstep(0.0, 0.12, rd.y);
+    c = mix(c, vec3(1.05, 1.02, 1.0) * (0.75 + 0.35 * s), nuvem * 0.85);
+  }
+  return c;
+}`;
+
+const VS_TERRENO = `#version 300 es
+layout(location=0) in vec3 pos; layout(location=1) in vec3 nor;
+uniform mat4 vp; uniform mat4 luzVP;
+out vec3 vP; out vec3 vN; out vec4 vLuz;
+void main() { vP = pos; vN = nor; vLuz = luzVP * vec4(pos, 1.0); gl_Position = vp * vec4(pos, 1.0); }`;
+const FS_TERRENO = `#version 300 es
+precision highp float;
+in vec3 vP; in vec3 vN; in vec4 vLuz; out vec4 cor;
+${RUIDO_GLSL}${LUZ_GLSL}
+void main() {
+  vec3 n = normalize(vN);
+  float det = fbm2(vP.xz * 0.18, 4), incl = 1.0 - n.y;
+  vec3 grama = mix(vec3(0.10, 0.20, 0.05), vec3(0.24, 0.32, 0.09), det);
+  vec3 rocha = mix(vec3(0.26, 0.24, 0.22), vec3(0.44, 0.41, 0.37), det);
+  vec3 a = mix(grama, rocha, smoothstep(0.22, 0.42, incl + det * 0.12));
+  a = mix(vec3(0.58, 0.52, 0.38), a, smoothstep(${AGUA.toFixed(1)} + 0.4, ${AGUA.toFixed(1)} + 2.5, vP.y + det));
+  a = mix(a, vec3(0.92, 0.94, 0.98), smoothstep(50.0, 62.0, vP.y + det * 10.0) * (1.0 - smoothstep(0.35, 0.6, incl)));
+  vec3 luz = SOL_COR * max(dot(n, sol), 0.0) * sombraPcf(vLuz) + CEU_AMB * (0.55 + 0.45 * n.y);
+  cor = vec4(neblina(a * luz, vP), 1.0);
+}`;
+const VS_ARVORE = `#version 300 es
+layout(location=0) in vec3 pos; layout(location=1) in vec3 nor; layout(location=2) in float folha;
+layout(location=3) in vec4 inst; layout(location=4) in vec2 inst2;
+uniform mat4 vp; uniform mat4 luzVP; uniform float t;
+out vec3 vP; out vec3 vN; out vec4 vLuz; out float vFolha; out float vTom;
+void main() {
+  float c = cos(inst2.x), s = sin(inst2.x);
+  mat2 g = mat2(c, -s, s, c);
+  vec3 p = pos * inst.w; p.xz = g * p.xz;
+  p.x += sin(t * 1.7 + inst.x * 0.13 + inst.z * 0.11) * 0.035 * p.y * folha;
+  vec3 w = p + inst.xyz, n = nor; n.xz = g * n.xz;
+  vP = w; vN = n; vFolha = folha; vTom = inst2.y; vLuz = luzVP * vec4(w, 1.0);
+  gl_Position = vp * vec4(w, 1.0);
+}`;
+const FS_ARVORE = `#version 300 es
+precision highp float;
+in vec3 vP; in vec3 vN; in vec4 vLuz; in float vFolha; in float vTom; out vec4 cor;
+${LUZ_GLSL}
+void main() {
+  vec3 n = normalize(vN);
+  vec3 a = mix(vec3(0.22, 0.14, 0.08), mix(vec3(0.05, 0.16, 0.06), vec3(0.14, 0.24, 0.06), vTom), vFolha);
+  float nl = max(dot(n, sol), 0.0) * 0.8 + 0.2 * vFolha;
+  vec3 luz = SOL_COR * nl * sombraPcf(vLuz) + CEU_AMB * (0.5 + 0.5 * n.y);
+  cor = vec4(neblina(a * luz, vP), 1.0);
+}`;
+const VS_AGUA = `#version 300 es
+layout(location=0) in vec3 pos;
+uniform mat4 vp; uniform mat4 luzVP;
+out vec3 vP; out vec4 vLuz;
+void main() { vP = pos; vLuz = luzVP * vec4(pos, 1.0); gl_Position = vp * vec4(pos, 1.0); }`;
+const FS_AGUA = `#version 300 es
+precision highp float;
+in vec3 vP; in vec4 vLuz; out vec4 cor; uniform float t;
+${RUIDO_GLSL}${LUZ_GLSL}${CEU_GLSL}
+void main() {
+  vec2 q = vP.xz;
+  float e = 0.08;
+  float h0 = fbm2(q * 0.11 + vec2(t * 0.20, t * 0.07), 5) + 0.5 * sin(q.x * 0.35 + t * 1.3) * sin(q.y * 0.27 - t * 0.9);
+  float hx = fbm2((q + vec2(e, 0.0)) * 0.11 + vec2(t * 0.20, t * 0.07), 5) + 0.5 * sin((q.x + e) * 0.35 + t * 1.3) * sin(q.y * 0.27 - t * 0.9);
+  float hz = fbm2((q + vec2(0.0, e)) * 0.11 + vec2(t * 0.20, t * 0.07), 5) + 0.5 * sin(q.x * 0.35 + t * 1.3) * sin((q.y + e) * 0.27 - t * 0.9);
+  vec3 n = normalize(vec3(h0 - hx, e * 3.0, h0 - hz));
+  vec3 v = normalize(vP - cam);
+  float fres = 0.04 + 0.96 * pow(1.0 - max(dot(-v, n), 0.0), 5.0);
+  float sh = sombraPcf(vLuz);
+  vec3 refl = ceu(reflect(v, n), t) * (0.35 + 0.65 * sh);
+  vec3 fundo = vec3(0.02, 0.07, 0.09) + vec3(0.03, 0.09, 0.08) * max(dot(n, sol), 0.0);
+  vec3 c = mix(fundo, refl, fres) + SOL_COR * pow(max(dot(reflect(v, n), sol), 0.0), 220.0) * 2.5 * sh;
+  cor = vec4(neblina(c, vP), 1.0);
+}`;
+const VS_TELA = `#version 300 es
+layout(location=0) in vec2 p; out vec2 uv;
+void main() { uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }`;
+const VS_CEU = `#version 300 es
+layout(location=0) in vec2 p; out vec2 uv;
+void main() { uv = p; gl_Position = vec4(p, 1.0, 1.0); }`;
+const FS_CEU = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 cor;
+uniform vec3 frente, direita, cima; uniform float t;
+${RUIDO_GLSL}${LUZ_GLSL}${CEU_GLSL}
+void main() { vec3 rd = normalize(frente + uv.x * direita + uv.y * cima); cor = vec4(ceu(rd, t), 1.0); }`;
+const FS_VAZIO = `#version 300 es
+precision highp float; void main() {}`;
+const FS_BRILHO = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 cor; uniform sampler2D img; uniform vec2 px;
+void main() {
+  vec3 c = texture(img, uv + px * vec2(-1, -1)).rgb + texture(img, uv + px * vec2(1, -1)).rgb
+         + texture(img, uv + px * vec2(-1, 1)).rgb + texture(img, uv + px * vec2(1, 1)).rgb;
+  cor = vec4(max(c * 0.25 - 1.0, 0.0), 1.0);
+}`;
+const FS_BORRAO = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 cor; uniform sampler2D img; uniform vec2 dir;
+void main() {
+  float w[5] = float[](0.227, 0.195, 0.122, 0.054, 0.016);
+  vec3 c = texture(img, uv).rgb * w[0];
+  for (int i = 1; i < 5; i++) c += (texture(img, uv + dir * float(i)).rgb + texture(img, uv - dir * float(i)).rgb) * w[i];
+  cor = vec4(c, 1.0);
+}`;
+const FS_JUNTA = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 cor; uniform sampler2D hdr, brilho;
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+void main() {
+  vec3 c = texture(hdr, uv).rgb + texture(brilho, uv).rgb * 0.55;
+  c = aces(c * 0.85);
+  vec2 d = uv - 0.5; c *= 1.0 - dot(d, d) * 0.55;
+  cor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+}`;
+const FS_MOSTRA = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 cor; uniform sampler2D img;
+void main() { cor = vec4(texture(img, uv).rgb, 1.0); }`;
+
+// Ray tracing por shader: esferas, colunas (caixas) e piso; sombra suave do sol, oclusão de ambiente e rebatidas.
+const NE = 40, NC = 8;
+const FS_RT = `#version 300 es
+precision highp float;
+out vec4 cor;
+uniform vec2 res; uniform float t; uniform int spp, rebatidas, quadro;
+uniform vec4 esf[${NE}]; uniform vec4 esfMat[${NE}];
+uniform vec3 cxMin[${NC}], cxMax[${NC}]; uniform vec4 cxMat[${NC}];
+uniform vec3 ro0, frente, direita, cima;
+const vec3 SOLD = normalize(vec3(0.5, 0.75, 0.35));
+const vec3 SOL_COR = vec3(1.7, 1.55, 1.35);
+uint semente;
+float rnd() { semente = semente * 747796405u + 2891336453u; uint w = ((semente >> ((semente >> 28u) + 4u)) ^ semente) * 277803737u; return float((w >> 22u) ^ w) / 4294967295.0; }
+vec3 rndEsfera() { return vec3(rnd(), rnd(), rnd()) - 0.5; }
+vec3 cosDir(vec3 n) {
+  float a = 6.2831853 * rnd(), r = rnd(), sr = sqrt(r);
+  vec3 u = normalize(cross(abs(n.x) > 0.5 ? vec3(0, 1, 0) : vec3(1, 0, 0), n)), v = cross(n, u);
+  return normalize(u * cos(a) * sr + v * sin(a) * sr + n * sqrt(1.0 - r));
+}
+vec3 ceuRt(vec3 rd) {
+  vec3 c = mix(vec3(0.62, 0.68, 0.78), vec3(0.16, 0.30, 0.62), pow(max(rd.y, 0.0), 0.5));
+  return c + vec3(12.0, 10.0, 8.0) * smoothstep(0.995, 0.998, dot(rd, SOLD));
+}
+bool caixa(vec3 ro, vec3 inv, vec3 mn, vec3 mx, float maxT, out float tt) {
+  vec3 t0 = (mn - ro) * inv, t1 = (mx - ro) * inv, a = min(t0, t1), b = max(t0, t1);
+  float tn = max(max(a.x, a.y), a.z), tf = min(min(b.x, b.y), b.z);
+  tt = tn > 1e-3 ? tn : tf;
+  return tf >= max(tn, 1e-3) && tt < maxT;
+}
+bool acerta(vec3 ro, vec3 rd, out float tt, out vec3 n, out vec4 m) {
+  tt = 1e9;
+  if (rd.y < -1e-5) {
+    float tp = -ro.y / rd.y;
+    if (tp > 1e-3) { tt = tp; n = vec3(0, 1, 0); vec3 p = ro + rd * tp;
+      float x = mod(floor(p.x * 0.5) + floor(p.z * 0.5), 2.0); m = vec4(mix(vec3(0.62), vec3(0.12), x), 0.0); }
+  }
+  for (int i = 0; i < ${NE}; i++) {
+    vec4 e = esf[i]; vec3 oc = ro - e.xyz; float b = dot(oc, rd), c = dot(oc, oc) - e.w * e.w, h = b * b - c;
+    if (h > 0.0) { h = sqrt(h); float ti = -b - h; if (ti < 1e-3) ti = -b + h;
+      if (ti > 1e-3 && ti < tt) { tt = ti; n = (ro + rd * ti - e.xyz) / e.w; m = esfMat[i]; } }
+  }
+  vec3 inv = 1.0 / rd;
+  for (int i = 0; i < ${NC}; i++) {
+    float tc;
+    if (caixa(ro, inv, cxMin[i], cxMax[i], tt, tc)) {
+      tt = tc; vec3 p = ro + rd * tc, c = (cxMin[i] + cxMax[i]) * 0.5, d = (p - c) / ((cxMax[i] - cxMin[i]) * 0.5), a = abs(d);
+      n = a.x > a.y && a.x > a.z ? vec3(sign(d.x), 0, 0) : a.y > a.z ? vec3(0, sign(d.y), 0) : vec3(0, 0, sign(d.z));
+      m = cxMat[i];
+    }
+  }
+  return tt < 1e8;
+}
+bool bloqueado(vec3 ro, vec3 rd, float maxT) {
+  if (rd.y < -1e-5 && -ro.y / rd.y < maxT) return true;
+  for (int i = 0; i < ${NE}; i++) {
+    vec4 e = esf[i]; vec3 oc = ro - e.xyz; float b = dot(oc, rd), c = dot(oc, oc) - e.w * e.w, h = b * b - c;
+    if (h > 0.0) { h = sqrt(h); float ti = -b - h; if (ti < 1e-3) ti = -b + h; if (ti > 1e-3 && ti < maxT && esfMat[i].w < 2.5) return true; }
+  }
+  vec3 inv = 1.0 / rd;
+  for (int i = 0; i < ${NC}; i++) { float tc; if (caixa(ro, inv, cxMin[i], cxMax[i], maxT, tc)) return true; }
+  return false;
+}
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+void main() {
+  semente = (uint(gl_FragCoord.x) * 1973u + uint(gl_FragCoord.y) * 9277u + uint(quadro) * 26699u) | 1u;
+  vec3 soma = vec3(0.0);
+  for (int s = 0; s < 16; s++) {
+    if (s >= spp) break;
+    vec2 uv = (gl_FragCoord.xy + vec2(rnd(), rnd()) - 0.5 - 0.5 * res) / res.y;
+    vec3 rd = normalize(frente + uv.x * direita + uv.y * cima), ro = ro0, peso = vec3(1.0), acc = vec3(0.0);
+    for (int b = 0; b < 8; b++) {
+      if (b >= rebatidas) break;
+      float tt; vec3 n; vec4 m;
+      if (!acerta(ro, rd, tt, n, m)) { acc += peso * ceuRt(rd); break; }
+      vec3 p = ro + rd * tt;
+      if (m.w > 2.5) { acc += peso * m.rgb * 5.0; break; }
+      if (dot(n, rd) > 0.0) n = -n;
+      vec3 o = p + n * 2e-3;
+      vec3 ls = normalize(SOLD + rndEsfera() * 0.06);
+      float nl = max(dot(n, ls), 0.0);
+      float vis = nl > 0.0 && !bloqueado(o, ls, 1e6) ? 1.0 : 0.0;
+      float ao = bloqueado(o, cosDir(n), 2.5) ? 0.3 : 1.0;
+      vec3 direto = SOL_COR * nl * vis + vec3(0.22, 0.27, 0.36) * ao;
+      if (m.w < 0.5) { acc += peso * m.rgb * direto; peso *= m.rgb; rd = cosDir(n); }
+      else if (m.w < 1.5) { acc += peso * m.rgb * direto * 0.25; peso *= m.rgb; rd = normalize(reflect(rd, n) + rndEsfera() * 0.18); }
+      else { peso *= m.rgb; rd = reflect(rd, n); }
+      ro = o;
+    }
+    soma += acc;
+  }
+  cor = vec4(pow(aces(soma / float(spp)), vec3(1.0 / 2.2)), 1.0);
+}`;
+
+// ------------------------------------------------------------------ WebGL
+const tela = document.getElementById("tela");
+let gl, renderizador = "", parado = false, pixel = new Uint8Array(4);
+let triTela, final = {}, jogo = null, rt = null;
+
+function falhar(msg) {
+  if (parado) return;
+  parado = true;
+  document.body.insertAdjacentHTML("beforeend", `<div class="erro">${msg}</div>`);
+  const a = api(); if (a) a.falha(msg);
+}
+function compilar(fonte, tipo) {
+  const s = gl.createShader(tipo); gl.shaderSource(s, fonte); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function programa(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compilar(vs, gl.VERTEX_SHADER)); gl.attachShader(p, compilar(fs, gl.FRAGMENT_SHADER)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const nome = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, ""); u[nome] = gl.getUniformLocation(p, nome); }
+  return {p, u};
+}
+function textura(l, a, interno, formato, tipo, filtro) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, interno, l, a, 0, formato, tipo, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filtro); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filtro);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function fboCom(tex, profundidade) {
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  if (tex) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  if (profundidade) gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, profundidade);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("a placa não aceitou o alvo de desenho");
+  return f;
+}
+function rbProf(l, a, amostras) {
+  const r = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, r);
+  if (amostras) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, amostras, gl.DEPTH_COMPONENT24, l, a);
+  else gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, l, a);
+  return r;
+}
+function desenharTela() { gl.bindVertexArray(triTela); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+
+function prepararBase() {
+  gl = tela.getContext("webgl2", {antialias: false, alpha: false, depth: false, powerPreference: "high-performance", preserveDrawingBuffer: false});
+  if (!gl) throw new Error("O WebGL 2 não está disponível nesta placa de vídeo ou driver.");
+  tela.addEventListener("webglcontextlost", e => { e.preventDefault(); falhar("O driver de vídeo reiniciou durante o teste."); });
+  const info = gl.getExtension("WEBGL_debug_renderer_info");
+  renderizador = (info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || "";
+  document.getElementById("placa").textContent = renderizador;
+  triTela = gl.createVertexArray(); gl.bindVertexArray(triTela);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  final.tex = textura(CFG.largura, CFG.altura, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+  final.fbo = fboCom(final.tex, null);
+  final.mostra = programa(VS_TELA, FS_MOSTRA);
+}
+
+// ------------------------------------------------------------------ cena de jogo
+function malhaArvore() {
+  const v = [];
+  const anel = (y, r, lados) => Array.from({length: lados}, (_, i) => { const a = i / lados * Math.PI * 2; return [Math.cos(a) * r, y, Math.sin(a) * r]; });
+  const tri = (a, b, c, n, folha) => { for (const p of [a, b, c]) v.push(p[0], p[1], p[2], n[0], n[1], n[2], folha); };
+  const tronco = anel(0, 0.32, 6), topoT = anel(2.4, 0.22, 6);
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6, n = norm([tronco[i][0] + tronco[j][0], 0, tronco[i][2] + tronco[j][2]]);
+    tri(tronco[i], topoT[i], tronco[j], n, 0); tri(tronco[j], topoT[i], topoT[j], n, 0);
+  }
+  for (const [y, r, h] of [[1.6, 2.3, 3.4], [3.5, 1.8, 3.0], [5.2, 1.25, 2.6]]) {
+    const base = anel(y, r, 9), pico = [0, y + h, 0];
+    for (let i = 0; i < 9; i++) {
+      const j = (i + 1) % 9, n = norm([base[i][0] + base[j][0], r * 1.1, base[i][2] + base[j][2]]);
+      tri(base[i], pico, base[j], n, 1); tri(base[j], [0, y, 0], base[i], [0, -1, 0], 1);
+    }
+  }
+  return new Float32Array(v);
+}
+function prepararJogo() {
+  const q = QUAL, W = CFG.largura, H = CFG.altura, c = {};
+  // terreno
+  const N = q.terreno, passo = TAM / N, alt = new Float32Array((N + 1) * (N + 1));
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) alt[j * (N + 1) + i] = altura(-TAM / 2 + i * passo, -TAM / 2 + j * passo);
+  const vt = new Float32Array((N + 1) * (N + 1) * 6);
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+    const k = j * (N + 1) + i, hx = alt[j * (N + 1) + Math.min(N, i + 1)] - alt[j * (N + 1) + Math.max(0, i - 1)];
+    const hz = alt[Math.min(N, j + 1) * (N + 1) + i] - alt[Math.max(0, j - 1) * (N + 1) + i];
+    const n = norm([-hx, 2 * passo, -hz]);
+    vt.set([-TAM / 2 + i * passo, alt[k], -TAM / 2 + j * passo, n[0], n[1], n[2]], k * 6);
+  }
+  const ind = new Uint32Array(N * N * 6);
+  for (let j = 0, o = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const a = j * (N + 1) + i, b = a + 1, d = a + N + 1, e = d + 1;
+    ind.set([a, d, b, b, d, e], o); o += 6;
+  }
+  c.terreno = gl.createVertexArray(); gl.bindVertexArray(c.terreno);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, vt, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, ind, gl.STATIC_DRAW);
+  c.nInd = ind.length;
+  // árvores (sempre as mesmas posições: semente fixa)
+  const malha = malhaArvore(), aleat = semente(20261102), inst = [];
+  for (let tent = 0; inst.length < q.arvores * 6 && tent < q.arvores * 12; tent++) {
+    const x = (aleat() - 0.5) * (TAM - 20), z = (aleat() - 0.5) * (TAM - 20), h = altura(x, z);
+    if (h < AGUA + 1.2 || h > 52) continue;
+    const incl = Math.abs(altura(x + 2, z) - h) + Math.abs(altura(x, z + 2) - h);
+    if (incl > 2.4 || ruido2(x * 0.018 + 5, z * 0.018 - 3) < 0.38) continue;
+    inst.push(x, h - 0.2, z, 0.8 + aleat() * 0.9, aleat() * 6.283, aleat());
+  }
+  c.nArvores = inst.length / 6; c.nVertArvore = malha.length / 7;
+  c.arvore = gl.createVertexArray(); gl.bindVertexArray(c.arvore);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, malha, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 28, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 28, 24);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inst), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, 24, 0); gl.vertexAttribDivisor(3, 1);
+  gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 2, gl.FLOAT, false, 24, 16); gl.vertexAttribDivisor(4, 1);
+  // água
+  c.agua = gl.createVertexArray(); gl.bindVertexArray(c.agua);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  const m = TAM / 2;
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-m, AGUA, -m, -m, AGUA, m, m, AGUA, -m, m, AGUA, -m, -m, AGUA, m, m, AGUA, m]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+  gl.bindVertexArray(null);
+  // programas
+  c.pTerreno = programa(VS_TERRENO, FS_TERRENO); c.pArvore = programa(VS_ARVORE, FS_ARVORE); c.pAgua = programa(VS_AGUA, FS_AGUA);
+  c.pCeu = programa(VS_CEU, FS_CEU); c.sTerreno = programa(VS_TERRENO, FS_VAZIO); c.sArvore = programa(VS_ARVORE, FS_VAZIO);
+  c.pBrilho = programa(VS_TELA, FS_BRILHO); c.pBorrao = programa(VS_TELA, FS_BORRAO); c.pJunta = programa(VS_TELA, FS_JUNTA);
+  // alvos: sombra, HDR (com MSAA), brilho em 1/4
+  c.S = Math.min(q.sombra, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+  c.sombraTex = textura(c.S, c.S, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  c.sombraFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, c.sombraFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, c.sombraTex, 0);
+  gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+  const flut = !!gl.getExtension("EXT_color_buffer_float");
+  const [interno, tipo] = flut ? [gl.RGBA16F, gl.HALF_FLOAT] : [gl.RGBA8, gl.UNSIGNED_BYTE];
+  c.hdrTex = textura(W, H, interno, gl.RGBA, tipo, gl.LINEAR);
+  let amostras = 0;
+  if (q.msaa) {
+    const aceitas = gl.getInternalformatParameter(gl.RENDERBUFFER, interno, gl.SAMPLES) || [];
+    amostras = [...aceitas].filter(s => s <= q.msaa).sort((a, b) => b - a)[0] || 0;
+  }
+  c.amostras = amostras;
+  if (amostras) {
+    const rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, amostras, interno, W, H);
+    c.msaaFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, c.msaaFbo);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbProf(W, H, amostras));
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error("a placa não aceitou o antisserrilhado");
+    c.hdrFbo = fboCom(c.hdrTex, null);
+  } else c.hdrFbo = fboCom(c.hdrTex, rbProf(W, H, 0));
+  c.bw = Math.max(1, W >> 2); c.bh = Math.max(1, H >> 2);
+  c.bA = textura(c.bw, c.bh, interno, gl.RGBA, tipo, gl.LINEAR); c.bB = textura(c.bw, c.bh, interno, gl.RGBA, tipo, gl.LINEAR);
+  c.fA = fboCom(c.bA, null); c.fB = fboCom(c.bB, null);
+  return c;
+}
+function camera(t, dur) {
+  const u = (t / dur) % 1, z = -330 + 660 * u, x = rioX(z) + Math.sin(u * 9.0) * 25;
+  const h = Math.max(altura(x, z), AGUA) + 16 + Math.sin(u * 13.0) * 5;
+  const za = z + 40, xa = rioX(za) + Math.sin(u * 9.0 + 0.5) * 18, ha = Math.max(altura(xa, za), AGUA) + 6;
+  return {o: [x, h, z], a: [xa, ha, za]};
+}
+function luzVP(foco) {
+  const R = 230, f = [foco[0], 0, foco[2]];
+  const v = M.olhar([f[0] + SOL[0] * 400, f[1] + SOL[1] * 400, f[2] + SOL[2] * 400], f, [0, 1, 0]);
+  return M.mul(M.orto(-R, R, -R, R, 50, 900), v);
+}
+function usarLuz(pr, c, lvp, cam, t) {
+  const u = pr.u;
+  if (u.luzVP) gl.uniformMatrix4fv(u.luzVP, false, lvp);
+  if (u.sol) gl.uniform3fv(u.sol, SOL);
+  if (u.cam) gl.uniform3fv(u.cam, cam);
+  if (u.t) gl.uniform1f(u.t, t);
+  if (u.texel) gl.uniform1f(u.texel, 1 / c.S);
+  if (u.sombra) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, c.sombraTex); gl.uniform1i(u.sombra, 0); }
+}
+function quadroJogo(t, dur) {
+  const c = jogo, W = CFG.largura, H = CFG.altura, cm = camera(t, dur);
+  const ver = M.olhar(cm.o, cm.a, [0, 1, 0]), proj = M.persp(1.05, W / H, 0.5, 1600), vp = M.mul(proj, ver);
+  const foco = [cm.o[0] + (cm.a[0] - cm.o[0]) * 3, 0, cm.o[2] + (cm.a[2] - cm.o[2]) * 3], lvp = luzVP(foco);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  // 1) sombra
+  gl.bindFramebuffer(gl.FRAMEBUFFER, c.sombraFbo); gl.viewport(0, 0, c.S, c.S); gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(2.0, 4.0);
+  gl.useProgram(c.sTerreno.p); gl.uniformMatrix4fv(c.sTerreno.u.vp, false, lvp);
+  gl.bindVertexArray(c.terreno); gl.drawElements(gl.TRIANGLES, c.nInd, gl.UNSIGNED_INT, 0);
+  gl.useProgram(c.sArvore.p); gl.uniformMatrix4fv(c.sArvore.u.vp, false, lvp); gl.uniform1f(c.sArvore.u.t, t);
+  gl.bindVertexArray(c.arvore); gl.drawArraysInstanced(gl.TRIANGLES, 0, c.nVertArvore, c.nArvores);
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  // 2) cena em HDR
+  gl.bindFramebuffer(gl.FRAMEBUFFER, c.amostras ? c.msaaFbo : c.hdrFbo); gl.viewport(0, 0, W, H);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(c.pTerreno.p); gl.uniformMatrix4fv(c.pTerreno.u.vp, false, vp); usarLuz(c.pTerreno, c, lvp, cm.o, t);
+  gl.bindVertexArray(c.terreno); gl.drawElements(gl.TRIANGLES, c.nInd, gl.UNSIGNED_INT, 0);
+  gl.useProgram(c.pArvore.p); gl.uniformMatrix4fv(c.pArvore.u.vp, false, vp); usarLuz(c.pArvore, c, lvp, cm.o, t);
+  gl.bindVertexArray(c.arvore); gl.drawArraysInstanced(gl.TRIANGLES, 0, c.nVertArvore, c.nArvores);
+  gl.useProgram(c.pAgua.p); gl.uniformMatrix4fv(c.pAgua.u.vp, false, vp); usarLuz(c.pAgua, c, lvp, cm.o, t);
+  gl.bindVertexArray(c.agua); gl.drawArrays(gl.TRIANGLES, 0, 6);
+  const f = norm([cm.a[0] - cm.o[0], cm.a[1] - cm.o[1], cm.a[2] - cm.o[2]]), tg = Math.tan(1.05 / 2);
+  const d = norm([-f[2], 0, f[0]]), up = [d[1] * f[2] - d[2] * f[1], d[2] * f[0] - d[0] * f[2], d[0] * f[1] - d[1] * f[0]];
+  gl.useProgram(c.pCeu.p); usarLuz(c.pCeu, c, lvp, cm.o, t);
+  gl.uniform3fv(c.pCeu.u.frente, f); gl.uniform3fv(c.pCeu.u.direita, d.map(x => x * tg * W / H)); gl.uniform3fv(c.pCeu.u.cima, up.map(x => x * tg));
+  desenharTela();
+  gl.disable(gl.DEPTH_TEST);
+  if (c.amostras) {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, c.msaaFbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, c.hdrFbo);
+    gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  }
+  // 3) brilho (bloom) e junção
+  gl.bindFramebuffer(gl.FRAMEBUFFER, c.fA); gl.viewport(0, 0, c.bw, c.bh);
+  gl.useProgram(c.pBrilho.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, c.hdrTex); gl.uniform1i(c.pBrilho.u.img, 0);
+  gl.uniform2f(c.pBrilho.u.px, 1 / W, 1 / H); desenharTela();
+  gl.useProgram(c.pBorrao.p); gl.uniform1i(c.pBorrao.u.img, 0);
+  for (let i = 0; i < 2; i++) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, c.fB); gl.bindTexture(gl.TEXTURE_2D, c.bA); gl.uniform2f(c.pBorrao.u.dir, 1.5 / c.bw, 0); desenharTela();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, c.fA); gl.bindTexture(gl.TEXTURE_2D, c.bB); gl.uniform2f(c.pBorrao.u.dir, 0, 1.5 / c.bh); desenharTela();
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, final.fbo); gl.viewport(0, 0, W, H);
+  gl.useProgram(c.pJunta.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, c.hdrTex); gl.uniform1i(c.pJunta.u.hdr, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, c.bA); gl.uniform1i(c.pJunta.u.brilho, 1);
+  desenharTela(); gl.activeTexture(gl.TEXTURE0);
+}
+function descreverJogo() {
+  return `${jogo.nArvores.toLocaleString("pt-BR")} árvores · sombra ${jogo.S}² · ${jogo.amostras ? jogo.amostras + "x MSAA" : "sem MSAA"}`;
+}
+
+// ------------------------------------------------------------------ ray tracing
+function prepararRt() {
+  const c = {pr: programa(VS_TELA, FS_RT)}, aleat = semente(777);
+  c.base = [];
+  for (let i = 0; i < NE; i++) {
+    let x, z, r, tipo, cor;
+    if (i < 4) { const a = i / 4 * Math.PI * 2 + 0.4; x = Math.cos(a) * 2.6; z = Math.sin(a) * 2.6; r = 1.15; tipo = [2, 1, 0, 1][i]; cor = [[0.95, 0.95, 0.95], [0.95, 0.75, 0.35], [0.85, 0.15, 0.12], [0.75, 0.78, 0.82]][i]; }
+    else if (i < 7) { const a = i * 2.1; x = Math.cos(a) * 9; z = Math.sin(a) * 9; r = 0.55; tipo = 3; cor = [[1.0, 0.55, 0.2], [0.3, 0.6, 1.0], [0.9, 0.3, 0.9]][i - 4]; }
+    else { const a = aleat() * Math.PI * 2, d = 5 + aleat() * 9; x = Math.cos(a) * d; z = Math.sin(a) * d; r = 0.35 + aleat() * 0.6;
+      tipo = aleat() < 0.55 ? 0 : aleat() < 0.7 ? 1 : 2; cor = [0.25 + aleat() * 0.7, 0.25 + aleat() * 0.7, 0.25 + aleat() * 0.7]; }
+    c.base.push({x, z, r, tipo, cor, fase: aleat() * 6.28});
+  }
+  c.esf = new Float32Array(NE * 4); c.mat = new Float32Array(NE * 4);
+  c.base.forEach((e, i) => c.mat.set([...e.cor, e.tipo], i * 4));
+  c.cxMin = new Float32Array(NC * 3); c.cxMax = new Float32Array(NC * 3); c.cxMat = new Float32Array(NC * 4);
+  for (let i = 0; i < NC; i++) {
+    const a = i / NC * Math.PI * 2, x = Math.cos(a) * 15, z = Math.sin(a) * 15, h = 3 + (i % 3) * 1.5;
+    c.cxMin.set([x - 0.7, 0, z - 0.7], i * 3); c.cxMax.set([x + 0.7, h, z + 0.7], i * 3);
+    c.cxMat.set(i % 2 ? [0.8, 0.78, 0.74, 0] : [0.6, 0.62, 0.66, 1], i * 4);
+  }
+  c.rpp = QUAL.spp * QUAL.rebatidas * 3;
+  return c;
+}
+let quadroN = 0;
+function quadroRt(t, dur) {
+  const c = rt, W = CFG.largura, H = CFG.altura, u = (t / dur) * Math.PI * 2;
+  c.base.forEach((e, i) => {
+    const sobe = e.tipo === 3 ? 1.8 + Math.sin(t * 1.3 + e.fase) * 0.6 : e.r + (i >= 7 ? Math.abs(Math.sin(t * 1.6 + e.fase)) * 0.9 : 0);
+    c.esf.set([e.x, sobe, e.z, e.r], i * 4);
+  });
+  const o = [Math.cos(u) * 13, 4.2 + Math.sin(u * 2) * 1.2, Math.sin(u) * 13], a = [0, 1.2, 0];
+  const f = norm([a[0] - o[0], a[1] - o[1], a[2] - o[2]]), d = norm([-f[2], 0, f[0]]);
+  const up = [d[1] * f[2] - d[2] * f[1], d[2] * f[0] - d[0] * f[2], d[0] * f[1] - d[1] * f[0]], tg = Math.tan(0.95 / 2) * 2;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, final.fbo); gl.viewport(0, 0, W, H);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+  const pu = c.pr.u; gl.useProgram(c.pr.p);
+  gl.uniform2f(pu.res, W, H); gl.uniform1f(pu.t, t); gl.uniform1i(pu.spp, QUAL.spp); gl.uniform1i(pu.rebatidas, QUAL.rebatidas);
+  gl.uniform1i(pu.quadro, quadroN++);
+  gl.uniform4fv(pu.esf, c.esf); gl.uniform4fv(pu.esfMat, c.mat);
+  gl.uniform3fv(pu.cxMin, c.cxMin); gl.uniform3fv(pu.cxMax, c.cxMax); gl.uniform4fv(pu.cxMat, c.cxMat);
+  gl.uniform3fv(pu.ro0, o); gl.uniform3fv(pu.frente, f); gl.uniform3fv(pu.direita, d.map(x => x * tg)); gl.uniform3fv(pu.cima, up.map(x => x * tg));
+  desenharTela();
+}
+function descreverRt() { return `${QUAL.spp} amostra${QUAL.spp > 1 ? "s" : ""} por pixel · ${QUAL.rebatidas} rebatidas · ${NE + NC + 1} objetos`; }
+
+// ------------------------------------------------------------------ medição
+// Fases por cena: aquecimento (não conta) e N passadas iguais. Cada quadro é desenhado fora da tela e sincronizado
+// (readPixels de 1 pixel), então o tempo de cada quadro é medido sem o limite do V-Sync.
+let cenaI = 0, fase = "aquecendo", passada = 0, inicioFase = 0, tempos = [], resultados = [], feitoSeg = 0, ultimoRelato = 0, perdeu = false;
+let janela = {q: 0, ms: 0}, fpsTela = 0;
+const totalSeg = CFG.cenas.length * (CFG.aquecer + CFG.passadas * CFG.duracao);
+const cenaAtual = () => CFG.cenas[cenaI];
+
+function prepararCena() {
+  const c = cenaAtual();
+  try {
+    if (c === "jogo" && !jogo) jogo = prepararJogo();
+    if (c === "rt" && !rt) rt = prepararRt();
+  } catch (e) { falhar("Não deu para preparar a cena: " + e.message); return false; }
+  document.getElementById("cena").textContent = NOMES[c];
+  document.getElementById("info").textContent = `${CFG.largura}×${CFG.altura} · ${c === "jogo" ? descreverJogo() : descreverRt()}`;
+  fase = CFG.aquecer > 0 ? "aquecendo" : "medindo"; passada = CFG.aquecer > 0 ? 0 : 1; inicioFase = performance.now(); tempos = [];
+  return true;
+}
+function duracaoFase() { return fase === "aquecendo" ? CFG.aquecer : CFG.duracao; }
+function fecharPassada() {
+  const soma = tempos.reduce((a, b) => a + b, 0), ord = [...tempos].sort((a, b) => b - a);
+  const lentos = ord.slice(0, Math.max(1, Math.round(ord.length / 100)));
+  const mediaLentos = lentos.reduce((a, b) => a + b, 0) / lentos.length;
+  return {fps: tempos.length * 1000 / soma, low1: 1000 / mediaLentos, quadros: tempos.length, ms_max: ord[0]};
+}
+function avancar(agora) {
+  if ((agora - inicioFase) / 1000 < duracaoFase()) return false;
+  feitoSeg += duracaoFase();
+  if (fase === "medindo") {
+    resultados.push(fecharPassada());
+    if (passada >= CFG.passadas) {
+      const c = cenaAtual(), a = api();
+      const dados = {passadas: resultados, largura: CFG.largura, altura: CFG.altura, qualidade: CFG.qualidade, renderizador,
+        detalhe: c === "jogo" ? descreverJogo() : descreverRt(), rpp: c === "rt" ? rt.rpp : 0};
+      if (!a) console.log("resultado", c, JSON.stringify(dados));
+      const envio = a ? Promise.resolve(a.resultado(c, dados)) : Promise.resolve();
+      resultados = []; cenaI++;
+      if (cenaI >= CFG.cenas.length) {
+        parado = true; relatar(agora, true);
+        envio.finally(() => { if (a) a.concluir(); else document.title = "concluido"; });
+        return true;
+      }
+      return !prepararCena();
+    }
+  }
+  fase = "medindo"; passada++; inicioFase = performance.now(); tempos = [];
+  return true;
+}
+function relatar(agora, fim) {
+  const pct = fim ? 1 : Math.min(1, (feitoSeg + Math.min(duracaoFase(), (agora - inicioFase) / 1000)) / totalSeg);
+  document.getElementById("barra").style.width = (pct * 100).toFixed(1) + "%";
+  if (janela.q) fpsTela = janela.q * 1000 / janela.ms;
+  document.getElementById("fps").textContent = janela.q ? Math.round(fpsTela) : "—";
+  const a = api();
+  if (a) a.progresso({cena: cenaAtual() || "", fase: fim ? "fim" : fase, passada, passadas: CFG.passadas, fps: fpsTela, pct});
+  janela = {q: 0, ms: 0};
+}
+function mostrar() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const lw = tela.width, la = tela.height, esc = Math.min(lw / CFG.largura, la / CFG.altura);
+  const w = Math.round(CFG.largura * esc), h = Math.round(CFG.altura * esc);
+  gl.viewport((lw - w) >> 1, (la - h) >> 1, w, h);
+  gl.useProgram(final.mostra.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, final.tex); gl.uniform1i(final.mostra.u.img, 0);
+  desenharTela();
+}
+function laco() {
+  if (parado) return;
+  if (perdeu) { perdeu = false; inicioFase = performance.now(); tempos = []; }
+  const limite = performance.now() + 30;
+  try {
+    do {
+      const t0 = performance.now(), t = (t0 - inicioFase) / 1000;
+      if (cenaAtual() === "jogo") quadroJogo(t, CFG.duracao); else quadroRt(t, CFG.duracao);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      const t1 = performance.now();
+      if (fase === "medindo") tempos.push(t1 - t0);
+      janela.q++; janela.ms += t1 - t0;
+      if (avancar(t1) || parado) break;
+    } while (performance.now() < limite);
+    const e = gl.getError();
+    if (e !== gl.NO_ERROR && e !== gl.CONTEXT_LOST_WEBGL) throw new Error("erro do WebGL " + e);
+  } catch (e) { falhar("A placa de vídeo falhou durante o teste: " + e.message); return; }
+  if (parado) { mostrar(); return; }
+  mostrar();
+  const agora = performance.now();
+  if (agora - ultimoRelato > 400) { relatar(agora, false); ultimoRelato = agora; }
+  requestAnimationFrame(laco);
+}
+// Janela minimizada ou escondida: o navegador para de desenhar. A passada em andamento recomeça quando voltar.
+document.addEventListener("visibilitychange", () => { if (document.hidden) perdeu = true; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { const a = api(); if (a) a.fechar(); } });
+function ajustarTela() { tela.width = Math.max(1, Math.round(innerWidth * devicePixelRatio)); tela.height = Math.max(1, Math.round(innerHeight * devicePixelRatio)); }
+window.addEventListener("resize", ajustarTela);
+
+function iniciar() {
+  if (!QUAL) return falhar("Qualidade desconhecida.");
+  ajustarTela();
+  try { prepararBase(); } catch (e) { return falhar(e.message); }
+  if (!prepararCena()) return;
+  requestAnimationFrame(laco);
+}
+iniciar();
+</script>
+</body>
+</html>

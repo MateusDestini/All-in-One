@@ -372,3 +372,115 @@ def historico() -> list[dict]:
 def _salvar(r: dict) -> None:
     resumo = {k: r[k] for k in ("quando", "unidade") + tuple(f"{c}_{t}" for c, *_ in TESTES for t in ("leitura", "escrita"))}
     _arquivo().write_text(json.dumps((historico() + [resumo])[-20:], ensure_ascii=False), encoding="utf-8")
+
+
+# ------------------------------------------------------------------ carregamento de jogo
+PACOTE_MB, ARQUIVOS, ARQUIVO_KB, FIOS_CARREGAMENTO = 512, 1000, 64, 8
+
+
+def _lib_carregamento():
+    import ctypes
+    lib = _lib()
+    lib.dc_ler_pacote.restype = ctypes.c_double
+    lib.dc_ler_pacote.argtypes = [ctypes.c_wchar_p, ctypes.c_int64]
+    lib.dc_ler_arquivos.restype = ctypes.c_double
+    lib.dc_ler_arquivos.argtypes = [ctypes.POINTER(ctypes.c_wchar_p), ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    return lib
+
+
+def testar_carregamento(progresso, raiz: str) -> dict:
+    """Simula um jogo carregando um mapa: um pacote de 512 MB lido em sequência e mil arquivos de 64 KB abertos por
+    8 threads, tudo sem o cache do Windows. Antes de medir, lê cada arquivo uma vez pelo caminho normal para o
+    antivírus examinar (senão a medida seria a do antivírus). Os arquivos são apagados no final."""
+    import ctypes
+    lib = _lib_carregamento()
+    pacote_bytes = PACOTE_MB * 2**20
+    arq_bytes = ARQUIVO_KB * 1024
+    if psutil.disk_usage(raiz).free < pacote_bytes + ARQUIVOS * arq_bytes + 512 * 2**20:
+        raise OSError(f"pouco espaço livre em {raiz} (precisa de {PACOTE_MB + 64 + 512} MB)")
+    pasta = Path(raiz) / "MonitorLentidaoCarregamento"
+    pasta.mkdir(exist_ok=True)
+    pacote = pasta / "mapa.pak"
+    nomes = [str(pasta / f"asset{i:04d}.dat") for i in range(ARQUIVOS)]
+    r = {"quando": datetime.now().strftime("%d/%m/%Y %H:%M"), "unidade": raiz.rstrip("\\/") or raiz}
+    try:
+        progresso(0.0, f"Preparando o mapa de teste ({PACOTE_MB} MB)...")
+        if not lib.dt_preparar(str(pacote), pacote_bytes):
+            raise OSError("não foi possível criar os arquivos de teste (sem permissão ou disco cheio?)")
+        if lib.dt_verificar(str(pacote), pacote_bytes) == 1:
+            raise OSError("o Windows deixou os arquivos comprimidos, e assim o teste mediria a memória e não o disco")
+        bloco = os.urandom(arq_bytes)
+        for i, n in enumerate(nomes):
+            with open(n, "wb") as f:
+                f.write(bloco[i % 64:] + bloco[:i % 64])  # cada arquivo diferente, nada comprime
+                f.flush()
+                os.fsync(f.fileno())
+            if i % 100 == 0:
+                progresso(0.3 + 0.3 * i / ARQUIVOS, "Preparando os arquivos pequenos...")
+        progresso(0.6, "Deixando o antivírus examinar os arquivos...")
+        for n in [str(pacote)] + nomes:
+            with open(n, "rb") as f:
+                f.read(1)
+        time.sleep(1.0)
+        progresso(0.7, "Carregando o mapa...")
+        t_pacote = lib.dc_ler_pacote(str(pacote), pacote_bytes)
+        progresso(0.85, "Carregando os arquivos pequenos...")
+        vetor = (ctypes.c_wchar_p * ARQUIVOS)(*nomes)
+        t_arquivos = lib.dc_ler_arquivos(vetor, ARQUIVOS, arq_bytes, FIOS_CARREGAMENTO)
+        if t_pacote <= 0 or t_arquivos <= 0:
+            raise OSError("erro de leitura no disco durante o teste")
+    finally:
+        for n in [str(pacote)] + nomes:
+            try:
+                os.remove(n)
+            except OSError:
+                pass
+        try:
+            pasta.rmdir()
+        except OSError:
+            pass
+    r.update(pacote_s=round(t_pacote, 3), pacote_mbs=round(pacote_bytes / 1e6 / t_pacote),
+             arquivos_s=round(t_arquivos, 3), arquivos_por_s=round(ARQUIVOS / t_arquivos),
+             arquivos_mbs=round(ARQUIVOS * arq_bytes / 1e6 / t_arquivos), total_s=round(t_pacote + t_arquivos, 2),
+             pacote_mb=PACOTE_MB, arquivos=ARQUIVOS, arquivo_kb=ARQUIVO_KB)
+    if r["pacote_mbs"] > 16000:
+        raise OSError("a leitura passou do limite físico de qualquer SSD: veio de um cache, não do disco")
+    r["avaliacao"] = _avaliar_carregamento(r)
+    _salvar_carregamento(r)
+    progresso(1.0, "Concluído")
+    return r
+
+
+def _avaliar_carregamento(r: dict) -> dict:
+    t = r["total_s"]
+    if t <= 0.6:
+        return {"tipo": "Rápido", "nivel": "ok", "texto": "Carregamento de SSD NVMe: nos jogos, o tempo de tela de carregamento "
+                "passa a depender do processador (descompactar e montar o mapa), não do disco."}
+    if t <= 2.5:
+        return {"tipo": "Bom", "nivel": "ok", "texto": "Carregamento de SSD SATA: rápido para qualquer jogo. Um NVMe ganha "
+                "pouco na prática, menos em jogos com DirectStorage."}
+    if t <= 8:
+        return {"tipo": "Lento", "nivel": "aviso", "texto": "Os arquivos pequenos demoram: é o comportamento de HD mecânico. "
+                "Instalar os jogos num SSD corta as telas de carregamento e os engasgos ao andar pelo mapa."}
+    return {"tipo": "Muito lento", "nivel": "aviso", "texto": "Muito lento para jogos: HD mecânico cheio ou fragmentado, "
+            "pendrive/HD externo em USB 2.0, ou outro programa usando o disco no teste."}
+
+
+def _arquivo_carregamento() -> Path:
+    return config.pasta_dados() / "testes_carregamento.json"
+
+
+def historico_carregamento() -> list[dict]:
+    try:
+        return json.loads(_arquivo_carregamento().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _salvar_carregamento(r: dict) -> None:
+    resumo = {k: r[k] for k in ("quando", "unidade", "pacote_s", "pacote_mbs", "arquivos_s", "arquivos_por_s", "total_s")}
+    try:
+        _arquivo_carregamento().write_text(json.dumps((historico_carregamento() + [resumo])[-20:], ensure_ascii=False),
+                                           encoding="utf-8")
+    except OSError:
+        log.exception("não consegui salvar o teste de carregamento")

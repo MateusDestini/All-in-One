@@ -307,6 +307,9 @@
     font: inherit; text-align: right; outline: none; }
   .campo-num:focus { border-color: var(--accent); }
   .grade.cinco { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .grade.quatro { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .grade.tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grade.tres .medidor .det { white-space: normal; }
   .grade.cinco .medidor .valor { font-size: 26px; white-space: nowrap; }
   .grade.cinco .medidor .det { white-space: pre-line; overflow: visible; }
   .medidor.alerta { background: var(--critico-bg); border-color: var(--critico); }
@@ -452,6 +455,22 @@
   .modal { border-radius: 16px; }
   .toast { border: 1px solid var(--line-forte); color: var(--text); }
   :root[data-tema="claro"] .toast { color: #fff; }
+  .linha.bg { grid-template-columns: 120px minmax(120px, 1fr) minmax(130px, 1fr) 80px 80px 80px 90px; cursor: default; }
+  .linha.bg .num-d { text-align: right; font-variant-numeric: tabular-nums; }
+  .bg-res { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 18px; margin-top: 12px; }
+  .bg-res .nota-grande { border-top: 0; padding: 4px 0; }
+  .bg-res .nota-grande .v { font-size: 28px; }
+  .linha.porta { grid-template-columns: 28px minmax(220px, 2.6fr) 70px minmax(120px, 1fr) 160px; cursor: default; }
+  .linha.porta.ausente .nome { opacity: .7; }
+  .linha.pacote { grid-template-columns: minmax(150px, 1fr) 120px 100px minmax(160px, 1.3fr) 90px; cursor: default; }
+  .linha.rgb { grid-template-columns: 28px minmax(220px, 2fr) minmax(160px, 1.4fr) 70px; cursor: default; }
+  .amostra-rgb { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line-forte, var(--line)); cursor: pointer; padding: 0; }
+  .amostra-rgb.ativa { outline: 2px solid var(--text); outline-offset: 2px; }
+  .linha.drv { grid-template-columns: minmax(220px, 2.4fr) minmax(110px, 1fr) 130px 96px minmax(120px, 1.2fr); cursor: default; }
+  .linha.drv .num-d { text-align: left; font-variant-numeric: tabular-nums; }
+  .linha.drv .prov { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .linha.wu { grid-template-columns: 28px minmax(240px, 3fr) minmax(110px, 1fr) 90px; cursor: default; }
+  .drv-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
   .linha.mod { grid-template-columns: minmax(220px, 2.2fr) 80px minmax(150px, 1.3fr) 56px 96px; cursor: default; }
   .linha.mod .nome small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .linha.mod.desligado .nome, .linha.mod.desligado .num-d { opacity: .55; }
@@ -644,6 +663,7 @@
     </div></div>
     <div class="grupo-nav" data-grupo="desempenho"><button class="cab-grupo">Desempenho<i class="ponto-g"></i><svg class="seta" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button><div class="itens">
       <button class="item" data-pag="benchmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 18a10 10 0 1 1 17.4 0"/><circle cx="12" cy="14" r="1.2"/></svg>Benchmark<span class="badge" id="badge-bench" hidden></span></button>
+      <button class="item" data-pag="bench_gpu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 15l3-3 2 2 4-4"/><path d="M6 18v3"/></svg>Benchmark da placa<span class="badge" id="badge-bench-gpu" hidden></span></button>
       <button class="item" data-pag="memoria"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7V4M12 7V4M17 7V4M7 20v-3M12 20v-3M17 20v-3"/></svg>Teste de memória</button>
       <button class="item" data-pag="estresse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Estresse<span class="badge" id="badge-estresse" hidden></span></button>
     </div></div>
@@ -651,7 +671,13 @@
       <button class="item" data-pag="otimizacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Otimização</button>
       <button class="item" data-pag="inicializacao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Inicialização<span class="badge" id="badge-ini" hidden></span></button>
       <button class="item" data-pag="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Instalar apps</button>
+      <button class="item" data-pag="drivers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="10" rx="1.5"/><path d="M8 7V4M12 7V4M16 7V4M8 20v-3M12 20v-3M16 20v-3"/><path d="M10 12h4"/></svg>Drivers<span class="badge" id="badge-drivers" hidden></span></button>
+      <button class="item" data-pag="rgb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Luzes RGB<span class="badge" id="badge-rgb" hidden></span></button>
       <button class="item" data-pag="windhawk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-3 2-5 5-5 9 2-1 3.5-1 5 0 1.5-1 3-1 5 0 0-4-2-7-5-9z"/><path d="M7 12c-2 1.5-3 3.5-3 6 2.5-.5 4.5-1.5 6-3.5"/><path d="M17 12c2 1.5 3 3.5 3 6-2.5-.5-4.5-1.5-6-3.5"/><path d="M12 12v9"/></svg>Windhawk<span class="badge" id="badge-wh" hidden></span></button>
+    </div></div>
+    <div class="grupo-nav" data-grupo="maker"><button class="cab-grupo">Maker<i class="ponto-g"></i><svg class="seta" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button><div class="itens">
+      <button class="item" data-pag="portas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 7V3h4v4"/><rect x="7" y="7" width="10" height="7" rx="1.5"/><path d="M12 14v7M9 18h6"/></svg>Portas COM<span class="badge" id="badge-portas" hidden></span></button>
+      <button class="item" data-pag="seriais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h2M7 12h2M7 15h2M13 9h4v6h-4z"/></svg>Drivers seriais<span class="badge" id="badge-seriais" hidden></span></button>
     </div></div>
     <div class="separador-nav"></div>
     <button class="item" data-pag="historico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Histórico</button>
@@ -800,6 +826,175 @@
       </div>
       <h2>Mods instalados</h2>
       <div class="tabela" id="wh-lista"><div class="vazio" style="border:0">Lendo o Windhawk...</div></div>
+    </section>
+
+    <!-- Benchmark da placa de vídeo -->
+    <section class="pagina" id="pag-bench_gpu">
+      <div class="topo">
+        <div><h1>Benchmark da placa de vídeo</h1><div class="sub">Duas cenas desenhadas na resolução escolhida, sem o limite do V-Sync: uma cena de jogo (vale com rio,
+          milhares de árvores, sombras em tempo real, água com reflexo e neblina) e uma de ray tracing (sombras suaves, reflexos e rebatidas de luz).
+          Cada cena aquece e depois mede 3 passadas iguais; a nota é a mediana.</div></div>
+        <button class="botao primario" id="btn-bg" onclick="alternarBenchGpu()">Iniciar</button>
+      </div>
+      <div class="ferramentas" style="flex-wrap:wrap">
+        <div class="segmentos" id="bg-cenas"><button class="ativo" data-v="jogo,rt">As duas cenas</button><button data-v="jogo">Cena de jogo</button><button data-v="rt">Ray tracing</button></div>
+        <div class="segmentos" id="bg-res"><button class="ativo" data-v="1080p">1080p</button><button data-v="1440p">1440p</button><button data-v="4k">4K</button></div>
+        <div class="segmentos" id="bg-qual"><button data-v="normal">Normal</button><button class="ativo" data-v="alta">Alta</button><button data-v="extrema">Extrema</button></div>
+        <span class="sub" id="bg-tempo"></span>
+      </div>
+      <div class="progresso" id="bg-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="bg-etapa">Abrindo a janela...</b><span class="sub" id="bg-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="bg-barra" style="width:0%"></div></div>
+      </div>
+      <div class="banner" id="bg-aviso" hidden></div>
+      <div id="bg-resultados"></div>
+      <div class="fazer" style="margin-top:4px"><b>Como comparar:</b> só vale comparar resultados com a mesma cena, resolução e qualidade. Use antes e depois
+        de um overclock, driver novo ou limpeza da placa. O ray tracing daqui é calculado nos shaders e roda em qualquer placa; ele não usa os núcleos RT
+        das RTX e Radeon RX 6000+, então não dá para comparar com o Port Royal ou o Speed Way do 3DMark.</div>
+      <div class="tit-secao"><h2>Histórico</h2><button class="botao peq" id="btn-bg-apagar" onclick="apagarHistBenchGpu()">Apagar histórico</button></div>
+      <div class="tabela" id="bg-historico"><div class="vazio" style="border:0">Nenhum teste ainda.</div></div>
+    </section>
+
+    <!-- Maker: portas COM -->
+    <section class="pagina" id="pag-portas">
+      <div class="topo">
+        <div><h1>Portas COM</h1><div class="sub">Placas (Arduino, ESP32, Pico...) e conversores USB-serial conectados, os aparelhos antigos que ficaram
+          registrados no Windows ("fantasmas") e os números COM presos por eles. Útil quando a placa nova vira COM15 ou a porta some.</div></div>
+        <button class="botao" id="btn-portas" onclick="iniciarTarefa('maker_portas')">Procurar de novo</button>
+      </div>
+      <div class="progresso" id="portas-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="portas-etapa">Preparando...</b><span class="sub" id="portas-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="portas-barra" style="width:0%"></div></div>
+      </div>
+      <div class="banner" id="portas-admin" hidden><span>Para remover aparelhos antigos e liberar números COM, o monitor precisa estar aberto como administrador.</span>
+        <button class="botao peq" onclick="reabrirAdmin()">Reabrir como administrador</button></div>
+      <div class="grade quatro" id="portas-medidores"></div>
+      <div class="tit-secao"><h2>Números COM</h2>
+        <div style="display:flex;gap:8px"><button class="botao" id="btn-portas-desfazer" onclick="acaoMaker({acao: 'desfazer'}, 'Voltar os números COM a como estavam?', 'A reserva de números COM volta exatamente ao que era antes de liberar.', 'Desfazer')" hidden>Desfazer</button>
+        <button class="botao primario" id="btn-portas-liberar" onclick="liberarNumerosCom()">Liberar números presos</button></div></div>
+      <div class="sub" id="portas-numeros" style="margin:-4px 0 12px"></div>
+      <div class="tit-secao"><h2>Aparelhos</h2>
+        <button class="botao primario" id="btn-portas-remover" onclick="removerFantasmas()">Remover os marcados</button></div>
+      <div class="sub" style="margin:-4px 0 12px">Só dá para marcar aparelhos que não estão conectados. Remover só apaga o registro antigo: se você plugar de novo, o Windows cria outro.</div>
+      <div class="progresso" id="maker-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="maker-etapa">Preparando...</b><span class="sub" id="maker-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="maker-barra" style="width:0%"></div></div>
+      </div>
+      <div class="tabela" id="portas-lista"><div class="vazio" style="border:0">Procurando...</div></div>
+    </section>
+
+    <!-- Maker: drivers seriais -->
+    <section class="pagina" id="pag-seriais">
+      <div class="topo">
+        <div><h1>Drivers seriais</h1><div class="sub">Diagnóstico das placas e conversores CH340, CP210x, FTDI, Prolific e Arduino conectados, as versões do driver
+          guardadas no Windows e a Arduino IDE. Mudar alguma coisa sempre pede confirmação.</div></div>
+        <button class="botao" id="btn-seriais" onclick="iniciarTarefa('maker_seriais')">Verificar de novo</button>
+      </div>
+      <div class="progresso" id="seriais-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="seriais-etapa">Preparando...</b><span class="sub" id="seriais-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="seriais-barra" style="width:0%"></div></div>
+      </div>
+      <div class="progresso" id="maker2-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="maker2-etapa">Preparando...</b><span class="sub" id="maker2-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="maker2-barra" style="width:0%"></div></div>
+      </div>
+      <div id="seriais-conectados"><div class="vazio">Verificando...</div></div>
+      <div class="tit-secao"><h2>Versões do driver no Windows</h2>
+        <button class="botao" id="btn-seriais-restaurar" onclick="acaoMaker({acao: 'restaurar'}, 'Restaurar os drivers removidos?', 'Todas as versões de driver serial removidas por aqui voltam para o Windows.', 'Restaurar')" hidden>Restaurar removidos</button></div>
+      <div class="sub" style="margin:-4px 0 12px">Quando a versão mais nova não funciona com o seu conversor (comum em clones), remover essa versão faz o Windows usar a anterior.
+        Antes de remover, o monitor guarda uma cópia.</div>
+      <div id="seriais-pacotes"></div>
+      <div class="tit-secao"><h2>Drivers oficiais</h2></div>
+      <div class="sub" style="margin:-4px 0 12px">Baixe sempre da página do fabricante do chip. Muitos também aparecem no Windows Update (página Drivers).</div>
+      <div class="drv-acoes" id="seriais-chips" style="margin-top:0"></div>
+      <div class="tit-secao"><h2>Arduino IDE</h2>
+        <div style="display:flex;gap:8px"><button class="botao" onclick="limparCacheIde()">Limpar cache da IDE</button>
+        <button class="botao primario" id="btn-seriais-ide" onclick="instalarIde()">Instalar a IDE</button></div></div>
+      <div id="seriais-ide"></div>
+    </section>
+
+    <!-- Iluminação RGB -->
+    <section class="pagina" id="pag-rgb">
+      <div class="topo">
+        <div><h1>Iluminação RGB</h1><div class="sub">Um efeito só para as luzes de todas as marcas, pelo OpenRGB (placa-mãe, memórias, placa de vídeo, coolers e fitas),
+          pelo Corsair iCUE e pelo Razer Chroma. Nada é gravado nos aparelhos: ao parar, as luzes voltam ao programa de cada marca.</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="botao" id="btn-rgb-conectar" onclick="iniciarTarefa('rgb_conectar')">Conectar</button>
+          <button class="botao primario" id="btn-rgb" onclick="alternarRgb()">Ligar efeito</button>
+        </div>
+      </div>
+      <div class="progresso" id="rgb-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="rgb-etapa">Preparando...</b><span class="sub" id="rgb-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="rgb-barra" style="width:0%"></div></div>
+      </div>
+      <div class="grade tres" id="rgb-pontes"></div>
+      <div class="cartao" style="margin-top:14px">
+        <div class="cab"><div><b>Efeito</b><div class="sub" id="rgb-ao-vivo"></div></div></div>
+        <div class="ferramentas" style="flex-wrap:wrap;margin:12px 0 0">
+          <div class="segmentos" id="rgb-efeito"></div>
+        </div>
+        <div class="ferramentas" style="flex-wrap:wrap;margin:12px 0 0" id="rgb-linha-cor">
+          <div id="rgb-amostras" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          <input type="color" id="rgb-cor" value="#ff6a00" title="Escolher outra cor" style="width:42px;height:30px;border:0;background:none;cursor:pointer">
+          <div class="segmentos" id="rgb-vel"><button data-v="lenta">Lenta</button><button class="ativo" data-v="media">Média</button><button data-v="rapida">Rápida</button></div>
+        </div>
+      </div>
+      <h2>Aparelhos</h2>
+      <div class="tabela" id="rgb-lista"><div class="vazio" style="border:0">Toque em Conectar.</div></div>
+      <details style="margin-top:14px"><summary class="sub" style="cursor:pointer">Diagnóstico</summary>
+        <pre id="rgb-log" style="white-space:pre-wrap;font-size:12px;color:var(--muted);margin:8px 0 0"></pre></details>
+    </section>
+
+    <!-- Drivers -->
+    <section class="pagina" id="pag-drivers">
+      <div class="topo">
+        <div><h1>Drivers</h1><div class="sub">Confere se o driver da placa de vídeo está atualizado, procura drivers no Windows Update, faz backup de todos
+          os drivers e lista o que está instalado. Instalar só acontece pelo botão, sempre com confirmação.</div></div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div class="segmentos" id="drv-tipo" title="Só para NVIDIA: Game Ready é para jogos, Studio é o driver testado para programas de criação"><button class="ativo" data-v="0">Game Ready</button><button data-v="1">Studio</button></div>
+          <button class="botao" id="btn-drv" onclick="carregarDrivers(true)">Procurar de novo</button>
+        </div>
+      </div>
+      <div class="progresso" id="drv-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="drv-etapa">Preparando...</b><span class="sub" id="drv-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="drv-barra" style="width:0%"></div></div>
+      </div>
+      <div id="drv-placas"><div class="vazio">Abrindo...</div></div>
+      <div class="progresso" id="drv-instalar-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="drv-instalar-etapa">Preparando...</b><span class="sub" id="drv-instalar-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="drv-instalar-barra" style="width:0%"></div></div>
+      </div>
+      <div id="drv-placa-mae"></div>
+
+      <div class="tit-secao"><h2>Windows Update</h2>
+        <div style="display:flex;gap:8px"><button class="botao" id="btn-drv-wu" onclick="iniciarTarefa('drivers_wu')">Procurar drivers</button>
+        <button class="botao primario" id="btn-drv-wu-instalar" onclick="instalarDriversWu()" hidden>Instalar os marcados</button></div></div>
+      <div class="sub" style="margin:-4px 0 12px">Drivers certificados pela Microsoft que o Windows tem para este PC e ainda não instalou. Procurar não instala nada.</div>
+      <div class="progresso" id="drv-wu-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="drv-wu-etapa">Preparando...</b><span class="sub" id="drv-wu-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="drv-wu-barra" style="width:0%"></div></div>
+      </div>
+      <div class="progresso" id="drv-wui-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="drv-wui-etapa">Preparando...</b><span class="sub" id="drv-wui-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="drv-wui-barra" style="width:0%"></div></div>
+      </div>
+      <div id="drv-wu"></div>
+
+      <div class="tit-secao"><h2>Backup dos drivers</h2>
+        <div style="display:flex;gap:8px"><button class="botao" onclick="api().drivers_abrir_backup()">Abrir a pasta</button>
+        <button class="botao primario" id="btn-drv-backup" onclick="iniciarTarefa('drivers_backup')">Fazer backup</button></div></div>
+      <div class="sub" style="margin:-4px 0 12px" id="drv-backup-sub">Copia todos os drivers que não vêm com o Windows (placa de vídeo, chipset, rede, áudio...) para Documentos\Destini-Drivers.
+        Útil antes de formatar: depois é só apontar o Gerenciador de Dispositivos para a pasta. Não muda nada no PC.</div>
+      <div class="progresso" id="drv-backup-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="drv-backup-etapa">Preparando...</b><span class="sub" id="drv-backup-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="drv-backup-barra" style="width:0%"></div></div>
+      </div>
+      <div id="drv-backup"></div>
+
+      <div class="tit-secao"><h2>Instalados</h2>
+        <div style="display:flex;gap:10px;align-items:center"><input class="busca" id="drv-busca" placeholder="Procurar aparelho, fabricante ou versão" oninput="renderListaDrivers()">
+        <div class="segmentos" id="drv-filtro"><button class="ativo" data-v="terceiros">De fabricantes</button><button data-v="todos">Todos</button></div></div></div>
+      <div class="tabela" id="drv-lista"><div class="vazio" style="border:0">Lendo...</div></div>
     </section>
 
     <!-- Benchmark -->
@@ -1033,6 +1228,15 @@
         <div class="trilho"><div class="enche" id="disco-barra" style="width:0%"></div></div>
       </div>
       <div id="disco-resultado"></div>
+      <div class="tit-secao"><h2>Carregamento de jogo</h2>
+        <button class="botao primario" id="btn-carregamento" onclick="testarCarregamento()">Medir carregamento</button></div>
+      <div class="sub" style="margin:-4px 0 12px">Simula um jogo abrindo um mapa na unidade escolhida acima: um pacote de 512 MB lido de uma vez e mil arquivos de 64 KB
+        (texturas, sons) abertos por 8 threads, sem o cache do Windows. Leva menos de 1 minuto; os arquivos são apagados no final.</div>
+      <div class="progresso" id="carregamento-progresso" hidden>
+        <div style="display:flex;justify-content:space-between"><b id="carregamento-etapa">Preparando...</b><span class="sub" id="carregamento-pct">0%</span></div>
+        <div class="trilho"><div class="enche" id="carregamento-barra" style="width:0%"></div></div>
+      </div>
+      <div id="carregamento-resultado"></div>
     </section>
 
     <!-- Rede -->
@@ -1540,7 +1744,11 @@ const metricasHtml = ms => ms.length ? `<div class="metricas">${ms.map(([k, v]) 
 const ROTULO = { ok: "Saudável", aviso: "Atenção", critico: "Crítico", sem_dados: "Sem dados" };
 const tarefas = {};
 const renderTarefa = {
-  rede: renderRede, disco: renderDisco, saude_discos: renderSaudeDiscos, energia: renderEnergia, limpeza: renderLimpeza,
+  rede: renderRede, disco: renderDisco, carregamento: renderCarregamento, saude_discos: renderSaudeDiscos, energia: renderEnergia, limpeza: renderLimpeza,
+  drivers: s => renderDrivers(s), drivers_placa: s => renderDriverPlaca(s), drivers_wu: s => renderDriversWu(s),
+  drivers_wu_instalar: s => renderDriversWuInstalar(s), drivers_backup: s => renderDriversBackup(s),
+  maker_portas: s => renderPortas(s), maker_seriais: s => renderSeriais(s), maker_acao: s => renderAcaoMaker(s),
+  rgb_conectar: s => renderRgbConectar(s), rgb_sdk: s => renderRgbSdk(s),
 };
 
 async function iniciarTarefa(nome, parametro) {
@@ -1622,6 +1830,35 @@ async function carregarUnidades() {
   document.getElementById("btn-disco").disabled = !u.unidades.length || tarefas.disco?.rodando;
   if (!tarefas.disco?.resultado && u.historico.length) document.getElementById("disco-resultado").innerHTML = historicoDisco(u.historico);
   discoHistorico = u.historico;
+  carregamentoHistorico = u.carregamento || [];
+  document.getElementById("btn-carregamento").disabled = !u.unidades.length || tarefas.carregamento?.rodando;
+  if (!tarefas.carregamento?.resultado && carregamentoHistorico.length) document.getElementById("carregamento-resultado").innerHTML = historicoCarregamento(carregamentoHistorico);
+}
+let carregamentoHistorico = [];
+function testarCarregamento() { if (unidadeEscolhida) iniciarTarefa("carregamento", unidadeEscolhida); }
+const fmtS = v => v == null ? "--" : v < 10 ? fmt(v, 2) : fmt(v, 1);
+function renderCarregamento(s) {
+  barraTarefa("carregamento", s);
+  const btn = document.getElementById("btn-carregamento");
+  btn.disabled = s.rodando;
+  btn.innerHTML = s.rodando ? `<span class="girando"></span> Medindo` : "Medir carregamento";
+  if (s.rodando) return;
+  const alvo = document.getElementById("carregamento-resultado");
+  if (s.erro) { alvo.innerHTML = erroHtml(s.erro); return; }
+  const r = s.resultado; if (!r) return;
+  alvo.innerHTML = `<div class="sub" style="margin-bottom:10px">Unidade ${esc(r.unidade)} · ${esc(r.quando)}</div>
+    <div class="caixa"><table class="aida tabela-cdm"><tr><th>Etapa</th><th>Tempo</th><th>Velocidade</th></tr>
+      <tr><td><b>Pacote do mapa</b><div class="sub">${r.pacote_mb} MB lidos de uma vez</div></td><td class="cdm">${fmtS(r.pacote_s)}<small>s</small></td><td class="cdm">${n0(r.pacote_mbs)}<small>MB/s</small></td></tr>
+      <tr><td><b>Arquivos pequenos</b><div class="sub">${n0(r.arquivos)} de ${r.arquivo_kb} KB, 8 threads</div></td><td class="cdm">${fmtS(r.arquivos_s)}<small>s</small></td><td class="cdm">${n0(r.arquivos_por_s)}<small>arquivos/s</small></td></tr>
+      <tr><td><b>Total</b><div class="sub">o que o disco soma na tela de carregamento</div></td><td class="cdm">${fmtS(r.total_s)}<small>s</small></td><td></td></tr></table></div>
+    <div class="cartao" style="margin-top:14px"><div class="cab"><b>O que isso significa</b><span class="selo ${r.avaliacao.nivel}">${esc(r.avaliacao.tipo)}</span></div>
+      <div class="motivo">${esc(r.avaliacao.texto)}</div></div>
+    ${historicoCarregamento([r, ...carregamentoHistorico.filter(h => h.quando !== r.quando)])}`;
+  carregarUnidades();
+}
+function historicoCarregamento(h) {
+  return h.length > 1 || (h.length && !tarefas.carregamento?.resultado) ? `<h2>Medidas anteriores</h2><div class="caixa"><table class="aida"><tr><th>Quando</th><th>Unidade</th><th>Pacote</th><th>Arquivos</th><th>Total</th></tr>
+    ${h.map(x => `<tr><td>${esc(x.quando)}</td><td>${esc(x.unidade)}</td><td>${fmtS(x.pacote_s)} s · ${n0(x.pacote_mbs)} MB/s</td><td>${fmtS(x.arquivos_s)} s · ${n0(x.arquivos_por_s)}/s</td><td>${fmtS(x.total_s)} s</td></tr>`).join("")}</table></div>` : "";
 }
 let discoHistorico = [];
 function testarDisco() { if (unidadeEscolhida) iniciarTarefa("disco", unidadeEscolhida); }
@@ -1690,8 +1927,9 @@ async function carregarOtimizacao() {
       <div class="sub">${esc(a.descricao)} ${esc(a.efeito)}</div></div>
       <button class="chave ${a.ligado ? "on" : ""}" onclick="alternarAjuste(${i})"></button></div>`).join("");
 }
-async function alternarAjuste(i) {
+async function alternarAjuste(i, confirmado) {
   const a = otiEstado.ajustes[i];
+  if (a.confirmar && !a.ligado && !confirmado) { confirmar(a.titulo + "?", a.confirmar, "Ligar", () => alternarAjuste(i, true)); return; }
   const r = await api().otimizacao_ajuste(a.id, !a.ligado);
   toast(r.mensagem); carregarOtimizacao();
 }
@@ -2093,6 +2331,438 @@ function renderPawnio(s) {
 }
 // ------------------------------------------------------------------ Windhawk
 let whDados = null;
+// ------------------------------------------------------------------ benchmark da placa de vídeo
+let bgEstado = null;
+["bg-cenas", "bg-res", "bg-qual"].forEach(id => segmento(id, () => renderBenchGpu()));
+async function atualizarBenchGpu() {
+  bgEstado = await api().bench_gpu_estado();
+  renderBenchGpu();
+}
+const FASE_BG = { abrindo: "Abrindo a janela e preparando a cena...", aquecendo: "aquecendo (não conta)", medindo: "passada", fim: "terminando" };
+function renderBenchGpu() {
+  const e = bgEstado; if (!e) return;
+  const btn = document.getElementById("btn-bg");
+  btn.textContent = e.rodando ? "Cancelar" : (e.resultados.length ? "Rodar de novo" : "Iniciar");
+  btn.classList.toggle("primario", !e.rodando);
+  const cenas = (valorSeg("bg-cenas") || "jogo,rt").split(",").length;
+  const seg = cenas * (e.aquecer + e.passadas * e.duracao_passada);
+  document.getElementById("bg-tempo").textContent = e.rodando ? "" : `Leva cerca de ${Math.ceil(seg / 60)} min, com a janela aberta.`;
+  ["bg-cenas", "bg-res", "bg-qual"].forEach(id => document.querySelectorAll(`#${id} button`).forEach(b => b.disabled = e.rodando));
+  const v = e.vivo || {};
+  document.getElementById("bg-progresso").hidden = !e.rodando;
+  if (e.rodando) {
+    const nome = { jogo: "Cena de jogo", rt: "Ray tracing" }[v.cena] || "";
+    document.getElementById("bg-etapa").textContent = v.fase === "medindo" ? `${nome}: passada ${v.passada} de ${v.passadas} · ${fmt(v.fps, 0)} FPS`
+      : v.fase === "aquecendo" ? `${nome}: ${FASE_BG.aquecendo}` : FASE_BG[v.fase] || FASE_BG.abrindo;
+    document.getElementById("bg-pct").textContent = Math.round((v.pct || 0) * 100) + "%" + (e.temp_max ? ` · placa até ${fmt(e.temp_max, 0)} °C` : "");
+    document.getElementById("bg-barra").style.width = ((v.pct || 0) * 100) + "%";
+  }
+  const aviso = document.getElementById("bg-aviso");
+  aviso.hidden = e.rodando || !e.erro || !e.mensagem;
+  aviso.textContent = e.erro ? e.mensagem : "";
+  document.getElementById("bg-resultados").innerHTML = e.resultados.map(r => {
+    const c = r.comparacao;
+    const comp = c ? `Comparado com ${esc(c.quando)} (${fmt(c.fps, 1)} FPS): ${c.diferenca > 0 ? "+" : ""}${fmt(c.diferenca, 1)}%` +
+      (c.dentro_da_variacao ? ", dentro da variação normal, ou seja, igual." : c.diferenca > 0 ? ", mais rápido." : ", mais lento.") : "Primeiro teste com essa cena, resolução e qualidade.";
+    const nota = (rot, val, un) => `<div class="nota-grande"><div class="sub">${rot}</div><div class="v">${val}${un ? `<small>${un}</small>` : ""}</div></div>`;
+    return `<div class="cartao"><div class="cab"><div><b>${esc(r.nome)}</b><div class="sub">${esc(r.resolucao.replace("x", "×"))} · qualidade ${esc(r.qualidade)} · ${esc(r.detalhe)}<br>${esc(r.placa)}</div></div>
+      <span class="selo ${r.confiavel ? "ok" : "aviso"}" title="Diferença entre a passada mais rápida e a mais lenta">${r.confiavel ? "Resultado confiável" : "Variou " + fmt(r.variacao, 1) + "%"}</span></div>
+      <div class="bg-res">${nota("FPS médio", fmt(r.fps, 1))}${nota("1% low", fmt(r.low1, 1), "FPS")}${nota("Pontos", n0(r.pontos))}
+        ${r.giga_raios != null ? nota("Raios por segundo", fmt(r.giga_raios, 2), "bilhões") : ""}${r.temp_max ? nota("Placa chegou a", fmt(r.temp_max, 0), "°C") : ""}</div>
+      <div class="motivo">${comp} Passadas: ${r.passadas.map(x => fmt(x, 1)).join(" · ")} FPS.${r.confiavel ? "" : " Variou mais que 3%: feche programas em segundo plano e rode de novo para comparar."}</div></div>`;
+  }).join("");
+  const h = e.historico || [];
+  document.getElementById("btn-bg-apagar").disabled = !h.length || e.rodando;
+  document.getElementById("bg-historico").innerHTML = h.length ? `<div class="linha bg cab"><div>Quando</div><div>Cena</div><div>Resolução</div><div style="text-align:right">FPS</div><div style="text-align:right">1% low</div><div style="text-align:right">Pontos</div><div style="text-align:right">Variação</div></div>` +
+    h.map(r => `<div class="linha bg"><div class="sub">${esc(r.quando)}</div><div class="nome" title="${esc(r.placa)}">${esc(r.nome)}<small>${esc(r.placa)}</small></div>
+      <div>${esc(r.resolucao.replace("x", "×"))} · ${esc(r.qualidade)}</div><div class="num-d">${fmt(r.fps, 1)}</div><div class="num-d">${fmt(r.low1, 1)}</div>
+      <div class="num-d">${n0(r.pontos)}</div><div class="num-d">${fmt(r.variacao, 1)}%</div></div>`).join("")
+    : `<div class="vazio" style="border:0">Nenhum teste ainda.</div>`;
+}
+async function alternarBenchGpu() {
+  if (bgEstado?.rodando) { await api().bench_gpu_cancelar(); await atualizarBenchGpu(); return; }
+  const r = await api().bench_gpu_iniciar((valorSeg("bg-cenas") || "jogo,rt").split(","), valorSeg("bg-res"), valorSeg("bg-qual"));
+  toast(r.mensagem === "Benchmark iniciado." ? "Benchmark iniciado. Não minimize a janela do teste; Esc cancela." : r.mensagem);
+  await atualizarBenchGpu();
+}
+function apagarHistBenchGpu() {
+  confirmar("Apagar o histórico?", "Os resultados guardados do benchmark da placa de vídeo serão apagados.", "Apagar",
+    async () => { await api().bench_gpu_apagar_historico(); await atualizarBenchGpu(); });
+}
+
+// ------------------------------------------------------------------ iluminação RGB
+let rgbEstado = null, rgbConectou = false;
+const AMOSTRAS_RGB = [["Branco", "#ffffff"], ["Vermelho", "#ff0000"], ["Laranja", "#ff6a00"], ["Amarelo", "#ffd200"], ["Verde", "#00ff3c"],
+  ["Ciano", "#00dcff"], ["Azul", "#0050ff"], ["Roxo", "#9600ff"], ["Rosa", "#ff00a0"]];
+async function carregarRgb() {
+  rgbEstado = await api().rgb_estado();
+  renderRgb();
+  if (!rgbConectou && !rgbEstado.aparelhos.length && !tarefas.rgb_conectar?.rodando) { rgbConectou = true; iniciarTarefa("rgb_conectar"); }
+}
+async function configurarRgb(mudanca) {
+  const r = await api().rgb_configurar(mudanca);
+  if (!r.ok) { toast(r.mensagem); return; }
+  rgbEstado = r; renderRgb();
+}
+function renderRgbConectar(s) {
+  barraTarefa("rgb", s);
+  const b = document.getElementById("btn-rgb-conectar");
+  b.disabled = s.rodando; b.innerHTML = s.rodando ? `<span class="girando"></span> Conectando` : "Conectar";
+  if (s.rodando) return;
+  if (s.erro) toast(s.erro);
+  if (s.resultado) { rgbEstado = s.resultado; renderRgb(); }
+}
+function renderRgbSdk(s) {
+  barraTarefa("rgb", s);
+  if (s.rodando) return;
+  toast(s.erro || s.resultado?.mensagem || "");
+  if (s.resultado?.ok) iniciarTarefa("rgb_conectar");
+}
+function baixarSdkCorsair() {
+  confirmar("Baixar o SDK da Corsair?", "O monitor baixa a última versão do SDK no GitHub oficial da Corsair (github.com/CorsairOfficial/cue-sdk), " +
+    "guarda só a DLL de 64 bits na pasta de dados do monitor e só usa se a assinatura digital for da Corsair. Depois ligue o SDK no iCUE: Configurações > Geral > Ativar SDK.",
+    "Baixar", () => iniciarTarefa("rgb_sdk"));
+}
+function renderRgb() {
+  const e = rgbEstado; if (!e) return;
+  const ponteHtml = p => {
+    let acao = "";
+    if (p.nome === "OpenRGB" && !p.conectado) acao = e.openrgb ? `<button class="botao peq" onclick="abrirOpenRgb()">Abrir o OpenRGB</button>`
+      : `<button class="botao peq" onclick="api().abrir_site('https://openrgb.org/releases.html')">Baixar o OpenRGB</button>`;
+    if (p.nome === "Corsair iCUE" && !e.sdk_corsair) acao = `<button class="botao peq" onclick="baixarSdkCorsair()">Baixar o SDK</button>`;
+    return `<div class="medidor"><div class="rot">${esc(p.nome)}</div><div class="valor" style="font-size:18px">${p.conectado ? "Conectado" : "Desligado"}</div>
+      <div class="det">${esc(p.status)}</div>${acao ? `<div style="margin-top:8px">${acao}</div>` : ""}</div>`;
+  };
+  document.getElementById("rgb-pontes").innerHTML = e.pontes.map(ponteHtml).join("");
+  const ef = document.getElementById("rgb-efeito");
+  ef.innerHTML = Object.entries(e.efeitos).map(([k, v]) => `<button data-v="${k}" class="${k === e.cfg.efeito ? "ativo" : ""}">${esc(v)}</button>`).join("");
+  ef.querySelectorAll("button").forEach(b => b.onclick = () => configurarRgb({efeito: b.dataset.v}));
+  const usaCor = ["fixa", "respirar"].includes(e.cfg.efeito), usaVel = ["respirar", "arco_iris"].includes(e.cfg.efeito);
+  document.getElementById("rgb-amostras").style.display = usaCor ? "flex" : "none";
+  document.getElementById("rgb-cor").style.display = usaCor ? "" : "none";
+  document.getElementById("rgb-vel").style.display = usaVel ? "" : "none";
+  document.getElementById("rgb-linha-cor").style.display = usaCor || usaVel ? "" : "none";
+  document.getElementById("rgb-cor").value = e.cfg.cor;
+  document.getElementById("rgb-amostras").innerHTML = AMOSTRAS_RGB.map(([n, c]) =>
+    `<button class="amostra-rgb${c === e.cfg.cor ? " ativa" : ""}" title="${n}" style="background:${c}" onclick="configurarRgb({cor: '${c}'})"></button>`).join("");
+  document.querySelectorAll("#rgb-vel button").forEach(b => b.classList.toggle("ativo", b.dataset.v === e.cfg.velocidade));
+  document.getElementById("rgb-ao-vivo").textContent = e.rodando ? (e.ao_vivo || `Ligado: ${e.efeitos[e.cfg.efeito]}`) : "Escolha o efeito e toque em Ligar efeito.";
+  const btn = document.getElementById("btn-rgb");
+  btn.textContent = e.rodando ? "Parar" : "Ligar efeito"; btn.classList.toggle("primario", !e.rodando);
+  btn.disabled = !e.rodando && !e.aparelhos.some(a => a.ligado);
+  const lista = document.getElementById("rgb-lista");
+  lista.innerHTML = e.aparelhos.length ? `<div class="linha rgb cab"><div></div><div>Aparelho</div><div>Ponte</div><div>LEDs</div></div>` +
+    e.aparelhos.map((a, i) => `<div class="linha rgb"><div><input type="checkbox" class="marcar" ${a.ligado ? "checked" : ""} onchange="marcarRgb(${i}, this.checked)"></div>
+      <div class="nome" title="${esc(a.detalhe)}">${esc(a.nome)}<small>${esc(a.detalhe)}</small></div><div class="prov">${esc(a.ponte)}</div><div class="num-d">${a.leds}</div></div>`).join("")
+    : `<div class="vazio" style="border:0">Nenhum aparelho conectado. Abra o OpenRGB (com o servidor SDK ligado), o iCUE ou o Razer Synapse e toque em Conectar.</div>`;
+  document.getElementById("rgb-log").textContent = (e.log || []).slice(-30).join("\n");
+}
+document.getElementById("rgb-cor").addEventListener("change", ev => configurarRgb({cor: ev.target.value}));
+document.querySelectorAll("#rgb-vel button").forEach(b => b.addEventListener("click", () => configurarRgb({velocidade: b.dataset.v})));
+function marcarRgb(i, sim) {
+  const a = rgbEstado?.aparelhos[i]; if (!a) return;
+  const desl = new Set(rgbEstado.cfg.desligados || []);
+  sim ? desl.delete(a.chave) : desl.add(a.chave);
+  configurarRgb({desligados: [...desl]});
+}
+async function alternarRgb() {
+  const r = rgbEstado?.rodando ? await api().rgb_parar() : await api().rgb_iniciar();
+  toast(r.mensagem);
+  await carregarRgb();
+}
+async function abrirOpenRgb() {
+  const r = await api().rgb_abrir_openrgb(); toast(r.mensagem);
+  if (r.ok) setTimeout(() => iniciarTarefa("rgb_conectar"), 6000);
+}
+
+// ------------------------------------------------------------------ maker: portas COM e drivers seriais
+let portasDados = null, seriaisDados = null, makerUltimaAcao = null;
+const MARCADOS_PORTAS = new Set();
+function renderPortas(s) {
+  barraTarefa("portas", s);
+  const btn = document.getElementById("btn-portas");
+  btn.disabled = s.rodando; btn.innerHTML = s.rodando ? `<span class="girando"></span> Procurando` : "Procurar de novo";
+  if (s.rodando) return;
+  if (s.erro) { document.getElementById("portas-lista").innerHTML = erroHtml(s.erro); return; }
+  if (!s.resultado) return;
+  portasDados = s.resultado;
+  MARCADOS_PORTAS.clear();
+  portasDados.aparelhos.forEach(a => { if (a.sugerido) MARCADOS_PORTAS.add(a.id); });
+  renderPortasDados();
+}
+function renderPortasDados() {
+  const d = portasDados; if (!d) return;
+  const ocupado = !!tarefas.maker_acao?.rodando;
+  const pres = d.aparelhos.filter(a => a.presente), fant = d.aparelhos.filter(a => !a.presente);
+  const medidor = (rot, valor, det) => `<div class="medidor"><div class="rot">${rot}</div><div class="valor">${valor}</div><div class="det">${det}</div></div>`;
+  document.getElementById("portas-medidores").innerHTML =
+    medidor("Conectados agora", pres.length, pres.filter(a => a.porta).map(a => a.porta).join(", ") || "nenhuma porta COM") +
+    medidor("Aparelhos antigos", fant.length, fant.length ? "registrados mas desconectados" : "nada para limpar") +
+    medidor("Números reservados", d.reservadas.length, d.reservadas.length ? "COM" + d.reservadas.slice(0, 6).join(", COM") + (d.reservadas.length > 6 ? "..." : "") : "nenhum") +
+    medidor("Números presos", d.presas.length, d.presas.length ? "reservados sem uso" : "tudo certo");
+  const badge = document.getElementById("badge-portas"); badge.hidden = !d.presas.length && !fant.length; badge.textContent = fant.length || d.presas.length;
+  document.getElementById("portas-admin").hidden = d.admin;
+  document.getElementById("portas-numeros").textContent = d.presas.length
+    ? `O Windows guarda um número COM para cada placa que já foi plugada. ${d.presas.length === 1 ? "1 número está preso" : d.presas.length + " números estão presos"} sem uso (COM${d.presas.slice(0, 10).join(", COM")}${d.presas.length > 10 ? "..." : ""}). Liberar faz a próxima placa pegar o menor número livre.`
+    : "Nenhum número COM preso: só os em uso estão reservados.";
+  const lib = document.getElementById("btn-portas-liberar"); lib.disabled = ocupado || !d.presas.length;
+  document.getElementById("btn-portas-desfazer").hidden = !d.tem_backup_comdb;
+  document.getElementById("btn-portas-remover").disabled = ocupado || !MARCADOS_PORTAS.size;
+  const alvo = document.getElementById("portas-lista");
+  if (!d.aparelhos.length) { alvo.innerHTML = `<div class="vazio" style="border:0">Nenhuma placa, conversor ou porta COM encontrado.</div>`; return; }
+  alvo.innerHTML = `<div class="linha porta cab"><div></div><div>Aparelho</div><div>Porta</div><div>Fabricante</div><div>Situação</div></div>` +
+    d.aparelhos.map((a, i) => `<div class="linha porta${a.presente ? "" : " ausente"}">
+      <div>${a.presente ? "" : `<input type="checkbox" class="marcar" ${MARCADOS_PORTAS.has(a.id) ? "checked" : ""} onchange="marcarPorta(${i}, this.checked)">`}</div>
+      <div class="nome" title="${esc(a.id)}">${esc(a.nome)}<small>${esc([a.classe, a.vid ? "VID " + a.vid + " PID " + a.pid : ""].filter(Boolean).join(" · "))}</small></div>
+      <div>${esc(a.porta || "—")}</div><div class="prov">${esc(a.fabricante || "—")}</div>
+      <div>${a.presente ? (a.problema ? `<span class="selo critico">Código ${a.problema}</span>` : `<span class="selo ok">Conectado</span>`)
+        : `<span class="selo" title="Visto pela última vez${a.chegada ? " em " + esc(a.chegada) : ""}">Antigo${a.chegada ? " · " + esc(a.chegada) : ""}</span>`}</div></div>`).join("");
+}
+function marcarPorta(i, sim) {
+  const a = portasDados?.aparelhos[i]; if (!a) return;
+  sim ? MARCADOS_PORTAS.add(a.id) : MARCADOS_PORTAS.delete(a.id);
+  document.getElementById("btn-portas-remover").disabled = !MARCADOS_PORTAS.size;
+}
+function precisaAdmin(admin) {
+  if (admin) return false;
+  confirmar("Precisa de administrador", "Essa mudança precisa do monitor aberto como administrador. Reabrir agora?", "Reabrir como administrador", reabrirAdmin);
+  return true;
+}
+function acaoMaker(param, titulo, texto, rotulo) {
+  const admin = param.acao === "ide" || (param.acao === "fantasmas" || param.acao === "liberar" || param.acao === "desfazer" ? portasDados?.admin : seriaisDados?.admin);
+  if (precisaAdmin(admin)) return;
+  confirmar(titulo, texto, rotulo, () => { makerUltimaAcao = param.acao; iniciarTarefa("maker_acao", param); });
+}
+function removerFantasmas() {
+  const ids = [...MARCADOS_PORTAS];
+  if (!ids.length) { toast("Marque pelo menos um aparelho antigo."); return; }
+  acaoMaker({acao: "fantasmas", ids}, `Remover ${ids.length === 1 ? "1 aparelho antigo" : ids.length + " aparelhos antigos"}?`,
+    "Apaga do Windows o registro desses aparelhos que não estão conectados (com o pnputil). Não mexe em nada conectado. " +
+    "Se você plugar um deles de novo, o Windows cria o registro outra vez e instala o driver.", "Remover");
+}
+function liberarNumerosCom() {
+  const n = portasDados?.presas.length || 0;
+  acaoMaker({acao: "liberar"}, `Liberar ${n === 1 ? "1 número COM preso" : n + " números COM presos"}?`,
+    "Muda a reserva de números COM do Windows (registro, COM Name Arbiter) para manter só as portas em uso agora. " +
+    "O valor de antes fica guardado e o botão Desfazer volta exatamente como estava.", "Liberar");
+}
+function renderAcaoMaker(s) {
+  const naSeriais = ["reinstalar", "remover_pacote", "restaurar", "ide"].includes(makerUltimaAcao);
+  barraTarefa(naSeriais ? "maker2" : "maker", s);
+  if (portasDados) renderPortasDados();
+  if (seriaisDados) renderSeriaisDados();
+  if (s.rodando) return;
+  if (s.erro) { toast(s.erro); return; }
+  if (!s.resultado) return;
+  toast(s.resultado.mensagem);
+  if (naSeriais) iniciarTarefa("maker_seriais"); else iniciarTarefa("maker_portas");
+}
+function renderSeriais(s) {
+  barraTarefa("seriais", s);
+  const btn = document.getElementById("btn-seriais");
+  btn.disabled = s.rodando; btn.innerHTML = s.rodando ? `<span class="girando"></span> Verificando` : "Verificar de novo";
+  if (s.rodando) return;
+  if (s.erro) { document.getElementById("seriais-conectados").innerHTML = erroHtml(s.erro); return; }
+  if (!s.resultado) return;
+  seriaisDados = s.resultado;
+  renderSeriaisDados();
+}
+function serialSite(tipo, i) {
+  const d = seriaisDados; if (!d) return;
+  const u = tipo === "chip" ? d.chips[i]?.pagina : d.conectados[i]?.pagina;
+  if (u) api().abrir_site(u);
+}
+function renderSeriaisDados() {
+  const d = seriaisDados; if (!d) return;
+  const ocupado = !!tarefas.maker_acao?.rodando, ruins = d.conectados.filter(a => !a.ok).length;
+  const badge = document.getElementById("badge-seriais"); badge.hidden = !ruins; badge.textContent = ruins;
+  document.getElementById("seriais-conectados").innerHTML = d.conectados.length ? d.conectados.map((a, i) => `<div class="cartao">
+      <div class="cab"><div><b>${esc(a.nome)}</b><div class="sub">${esc([a.porta, a.chip, "VID " + a.vid + " PID " + a.pid].filter(Boolean).join(" · "))}</div></div>
+        <span class="selo ${a.ok ? "ok" : "critico"}">${a.ok ? "Funcionando" : "Com problema"}</span></div>
+      <div class="motivo"><b>${esc(a.veredito)}</b>${a.conselho ? " · " + esc(a.conselho) : ""}</div>
+      ${metricasHtml([["Driver", a.inf ? `${a.provedor} ${a.versao}`.trim() : "sem driver"], ["Arquivo", a.inf || "—"]])}
+      <div class="drv-acoes"><button class="botao" ${ocupado ? "disabled" : ""} onclick="reinstalarSerial(${i})">Reinstalar</button>
+        <button class="botao" onclick="serialSite('placa', ${i})">Página oficial do ${esc(a.chip)}</button></div></div>`).join("")
+    : `<div class="vazio">Nenhuma placa ou conversor serial conectado agora. Plugue a placa e toque em Verificar de novo.</div>`;
+  const pac = document.getElementById("seriais-pacotes");
+  pac.innerHTML = !d.admin ? `<div class="banner"><span>Para ver e remover as versões do driver, abra o monitor como administrador.</span><button class="botao peq" onclick="reabrirAdmin()">Reabrir como administrador</button></div>`
+    : !d.pacotes.length ? `<div class="vazio" style="padding:26px">Nenhum driver de chip serial de fabricante guardado no Windows.</div>`
+    : `<div class="tabela"><div class="linha pacote cab"><div>Chip</div><div>Versão</div><div>Data</div><div>Arquivo</div><div></div></div>` +
+      d.pacotes.map((p, i) => `<div class="linha pacote"><div class="nome">${esc(p.chip)}<small>${esc(p.provedor)}${p.em_uso ? " · em uso" : ""}</small></div>
+        <div class="num-d">${esc(p.versao)}</div><div class="num-d">${esc(p.data)}</div><div class="prov" title="${esc(p.original)}">${esc(p.original)} → ${esc(p.publicado)}</div>
+        <div><button class="botao peq" ${ocupado ? "disabled" : ""} onclick="removerPacote(${i})">Remover</button></div></div>`).join("") + `</div>`;
+  document.getElementById("btn-seriais-restaurar").hidden = !d.tem_backup;
+  document.getElementById("seriais-chips").innerHTML = d.chips.map((c, i) => `<button class="botao" onclick="serialSite('chip', ${i})">${esc(c.nome)}</button>`).join("");
+  const ideBtn = document.getElementById("btn-seriais-ide");
+  ideBtn.textContent = d.ide ? "Atualizar a IDE" : "Instalar a IDE"; ideBtn.disabled = ocupado || !d.winget;
+  document.getElementById("seriais-ide").innerHTML = `<div class="cartao"><div class="cab"><div><b>${d.ide ? "Arduino IDE " + esc(d.ide) + " instalada" : "Arduino IDE não instalada"}${d.ide_aberta ? " · aberta agora" : ""}</b>
+      <div class="sub">${d.winget ? "Instala e atualiza pelo winget, direto do site oficial." : "O winget não foi encontrado; veja a página Instalar apps."}</div></div></div>
+    <div class="motivo">${d.prendendo.length ? `Podem estar prendendo a porta COM: <b>${esc(d.prendendo.join(", "))}</b>. Feche antes de enviar o sketch.` : "Nenhum programa conhecido prendendo portas COM agora."}</div>
+    ${d.prendendo.length ? `<div class="drv-acoes"><button class="botao" onclick="fecharPrendendo()">Fechar esses programas</button></div>` : ""}</div>`;
+}
+function reinstalarSerial(i) {
+  const a = seriaisDados?.conectados[i]; if (!a) return;
+  acaoMaker({acao: "reinstalar", id: a.id}, `Reinstalar ${a.nome}?`,
+    "O monitor remove o aparelho e pede para o Windows detectar de novo; ele instala com o melhor driver que tiver. A porta some por alguns segundos.", "Reinstalar");
+}
+function removerPacote(i) {
+  const p = seriaisDados?.pacotes[i]; if (!p) return;
+  acaoMaker({acao: "remover_pacote", publicado: p.publicado}, `Remover o driver ${p.chip} ${p.versao}?`,
+    (p.em_uso ? "Ele está em uso por uma placa conectada: o Windows troca para outra versão guardada, ou a placa fica sem driver se esta for a única. " : "") +
+    "Antes, o monitor guarda uma cópia; \"Restaurar removidos\" devolve.", "Remover");
+}
+function instalarIde() {
+  const d = seriaisDados; if (!d) return;
+  confirmar(d.ide ? "Atualizar a Arduino IDE?" : "Instalar a Arduino IDE?", "Pelo winget, direto do site oficial. Pode levar alguns minutos. Feche a IDE antes.",
+    d.ide ? "Atualizar" : "Instalar", () => { makerUltimaAcao = "ide"; iniciarTarefa("maker_acao", {acao: "ide"}); });
+}
+function fecharPrendendo() {
+  const d = seriaisDados; if (!d?.prendendo.length) return;
+  confirmar("Fechar esses programas?", `${d.prendendo.join(", ")}. Trabalho não salvo neles pode ser perdido.`, "Fechar",
+    async () => { const r = await api().maker_fechar_prendendo(); toast(r.mensagem); iniciarTarefa("maker_seriais"); });
+}
+function limparCacheIde() {
+  confirmar("Limpar o cache da Arduino IDE?", "Apaga os índices baixados e os downloads temporários (pasta Arduino15). As placas e bibliotecas instaladas ficam. " +
+    "Resolve a IDE travada em \"Downloading index\".", "Limpar", async () => { const r = await api().maker_limpar_cache(); toast(r.mensagem); });
+}
+
+// ------------------------------------------------------------------ drivers
+let drvDados = null, drvWuMarcados = new Set(), drvWuLista = [];
+function carregarDrivers(forcar) {
+  if (tarefas.drivers?.rodando) return;
+  if (!forcar && drvDados) { renderDriversDados(); return; }
+  iniciarTarefa("drivers", { forcar: !!forcar, studio: valorSeg("drv-tipo") === "1" });
+}
+segmento("drv-tipo", () => carregarDrivers(true));
+segmento("drv-filtro", () => renderListaDrivers());
+function renderDrivers(s) {
+  barraTarefa("drv", s);
+  const btn = document.getElementById("btn-drv");
+  btn.disabled = s.rodando;
+  btn.innerHTML = s.rodando ? `<span class="girando"></span> Procurando` : "Procurar de novo";
+  if (s.rodando) { if (!drvDados) document.getElementById("drv-placas").innerHTML = ""; return; }
+  if (s.erro && !drvDados) { document.getElementById("drv-placas").innerHTML = erroHtml(s.erro); return; }
+  if (s.resultado) drvDados = s.resultado;
+  renderDriversDados();
+}
+function drvSite(tipo, i) {
+  const d = drvDados || {};
+  const u = tipo === "mae" ? d.placa_mae?.url : (d.placas?.[i]?.consulta?.pagina_modelo || d.placas?.[i]?.pagina);
+  if (u) api().abrir_site(u);
+}
+function renderDriversDados() {
+  const d = drvDados; if (!d) return;
+  const instalando = tarefas.drivers_placa?.rodando, placas = d.placas || [];
+  const novos = placas.filter(g => g.consulta?.novo).length;
+  const badge = document.getElementById("badge-drivers"); badge.hidden = !novos; badge.textContent = novos;
+  document.getElementById("drv-placas").innerHTML = placas.length ? placas.map((g, i) => {
+    const c = g.consulta || {};
+    const selo = c.novo ? `<span class="selo aviso">Tem versão nova</span>` : c.novo === false ? `<span class="selo ok">Em dia</span>`
+      : `<span class="selo">${c.erro ? "Sem resposta" : "Confira na página"}</span>`;
+    const podeInstalar = c.url && (c.novo || g.marca === "AMD");
+    const extras = [];
+    if (c.ultima) extras.push(["Mais recente", c.ultima + (c.studio ? " (Studio)" : "")]);
+    if (c.lancamento) extras.push(["Lançado em", c.lancamento]);
+    if (c.tamanho) extras.push(["Tamanho", c.tamanho]);
+    return `<div class="cartao"><div class="cab"><div><b>${esc(g.nome)}</b><div class="sub">Driver instalado: ${esc(g.instalado || "—")}${g.data ? " de " + esc(g.data) : ""}</div></div>${selo}</div>
+      <div class="motivo">${esc(c.mensagem || "")}</div>${metricasHtml(extras)}
+      <div class="drv-acoes">${podeInstalar ? `<button class="botao primario" ${instalando ? "disabled" : ""} onclick="instalarDriverPlaca(${i})">${instalando ? '<span class="girando"></span> Instalando' : `Baixar e instalar${c.ultima ? " o " + esc(c.ultima) : ""}`}</button>` : ""}
+        <button class="botao" onclick="drvSite('placa', ${i})">Página oficial</button></div></div>`;
+  }).join("") : `<div class="vazio">Não achei placa de vídeo NVIDIA, AMD ou Intel.</div>`;
+  const m = d.placa_mae || {};
+  document.getElementById("drv-placa-mae").innerHTML = m.modelo || m.fabricante ? `<div class="cartao"><div class="cab"><div><b>Placa-mãe ${esc(m.fabricante)} ${esc(m.modelo)}</b>
+    <div class="sub">Chipset, áudio, rede e BIOS vêm do site do fabricante da placa-mãe.</div></div>
+    <button class="botao" onclick="drvSite('mae')">Suporte da ${esc(m.marca)}</button></div></div>` : "";
+  const sub = document.getElementById("drv-backup-sub");
+  if (d.pasta_backup) sub.textContent = `Copia todos os drivers que não vêm com o Windows (placa de vídeo, chipset, rede, áudio...) para ${d.pasta_backup}. ` +
+    "Útil antes de formatar: depois é só apontar o Gerenciador de Dispositivos para a pasta. Não muda nada no PC.";
+  renderListaDrivers();
+}
+function renderListaDrivers() {
+  const alvo = document.getElementById("drv-lista"), d = drvDados;
+  if (!d) return;
+  const todos = valorSeg("drv-filtro") === "todos", busca = (document.getElementById("drv-busca").value || "").trim().toLowerCase();
+  const lista = (d.drivers || []).filter(x => (todos || !x.microsoft) &&
+    (!busca || [x.aparelho, x.fabricante, x.provedor, x.versao, x.classe].some(v => String(v || "").toLowerCase().includes(busca))));
+  if (!lista.length) { alvo.innerHTML = `<div class="vazio" style="border:0">${busca ? "Nada encontrado." : "Nenhum driver de fabricante."}</div>`; return; }
+  const mostrar = lista.slice(0, 400);
+  alvo.innerHTML = `<div class="linha drv cab"><div>Aparelho</div><div>Tipo</div><div>Versão</div><div>Data</div><div>Fornecedor</div></div>` +
+    mostrar.map(x => `<div class="linha drv"><div class="nome" title="${esc(x.aparelho)}">${esc(x.aparelho)}<small>${esc(x.fabricante)}${x.assinado ? "" : " · sem assinatura digital"}</small></div>
+      <div class="prov" title="${esc(x.classe)}">${esc(x.classe || "—")}</div><div class="num-d">${esc(x.versao || "—")}</div>
+      <div class="num-d">${esc(x.data || "—")}</div><div class="prov" title="${esc(x.provedor)}">${esc(x.provedor || "—")}</div></div>`).join("") +
+    (lista.length > mostrar.length ? `<div class="linha drv"><div class="sub">e mais ${lista.length - mostrar.length}; use a busca.</div></div>` : "");
+}
+function instalarDriverPlaca(i) {
+  const g = drvDados?.placas?.[i], c = g?.consulta;
+  if (!c?.url) return;
+  confirmar(`Instalar o driver ${c.ultima || "da " + g.marca}?`,
+    `O monitor baixa o instalador oficial da ${g.marca}${c.tamanho ? " (" + c.tamanho + ")" : ""}, confere a assinatura digital e abre a tela de instalação dela. ` +
+    "Feche os jogos antes: a tela pode piscar ou ficar preta por alguns segundos. Se der problema, dá para voltar ao driver de antes em " +
+    "Gerenciador de Dispositivos → Adaptadores de vídeo → sua placa → Driver → Reverter driver.",
+    "Baixar e instalar", () => iniciarTarefa("drivers_placa", i));
+}
+function renderDriverPlaca(s) {
+  barraTarefa("drv-instalar", s);
+  if (!s.rodando && (s.erro || s.resultado)) toast(s.erro || s.resultado.mensagem);
+  renderDriversDados();
+}
+function renderDriversWu(s) {
+  barraTarefa("drv-wu", s);
+  const btn = document.getElementById("btn-drv-wu");
+  btn.disabled = s.rodando || !!tarefas.drivers_wu_instalar?.rodando;
+  btn.innerHTML = s.rodando ? `<span class="girando"></span> Procurando` : (s.resultado ? "Procurar de novo" : "Procurar drivers");
+  if (s.rodando) return;
+  const alvo = document.getElementById("drv-wu");
+  if (s.erro) { alvo.innerHTML = erroHtml(s.erro); return; }
+  const r = s.resultado; if (!r) return;
+  drvWuLista = r.drivers || [];
+  drvWuMarcados = new Set(drvWuLista.map(u => u.id));
+  document.getElementById("btn-drv-wu-instalar").hidden = !drvWuLista.length;
+  if (!drvWuLista.length) { alvo.innerHTML = `<div class="vazio" style="padding:26px"><b>Nada novo no Windows Update</b><div style="margin-top:6px">Procurado em ${esc(r.quando)}.</div></div>`; return; }
+  alvo.innerHTML = `<div class="tabela"><div class="linha wu cab"><div></div><div>Driver</div><div>Tipo</div><div>Tamanho</div></div>` +
+    drvWuLista.map((u, i) => `<div class="linha wu"><div><input type="checkbox" class="marcar" checked onchange="marcarWu(${i}, this.checked)"></div>
+      <div class="nome" title="${esc(u.titulo)}">${esc(u.titulo)}<small>${esc(u.fabricante || "")}${u.data ? " · " + esc(u.data) : ""}</small></div>
+      <div class="prov">${esc(u.classe || "—")}</div><div class="num-d">${u.mb ? fmt(u.mb) + " MB" : "—"}</div></div>`).join("") + `</div>`;
+}
+function marcarWu(i, sim) { const id = drvWuLista[i]?.id; if (id) sim ? drvWuMarcados.add(id) : drvWuMarcados.delete(id); }
+function instalarDriversWu() {
+  const ids = [...drvWuMarcados];
+  if (!ids.length) { toast("Marque pelo menos um driver."); return; }
+  if (drvDados && !drvDados.admin) {
+    confirmar("Precisa de administrador", "Para instalar pelo Windows Update o monitor precisa estar aberto como administrador. Reabrir agora?",
+      "Reabrir como administrador", reabrirAdmin);
+    return;
+  }
+  confirmar(`Instalar ${ids.length === 1 ? "1 driver" : ids.length + " drivers"} do Windows Update?`,
+    "O Windows baixa e instala os drivers marcados, do mesmo jeito que o Windows Update faria. Pode pedir para reiniciar. " +
+    "Para desfazer um driver: Gerenciador de Dispositivos → aparelho → Driver → Reverter driver.",
+    "Instalar", () => iniciarTarefa("drivers_wu_instalar", ids));
+}
+function renderDriversWuInstalar(s) {
+  barraTarefa("drv-wui", s);
+  const btn = document.getElementById("btn-drv-wu-instalar");
+  btn.disabled = s.rodando;
+  btn.innerHTML = s.rodando ? `<span class="girando"></span> Instalando` : "Instalar os marcados";
+  document.getElementById("btn-drv-wu").disabled = s.rodando;
+  if (s.rodando) return;
+  if (s.erro) { toast(s.erro); return; }
+  if (s.resultado) { toast(s.resultado.mensagem); iniciarTarefa("drivers_wu"); carregarDrivers(true); }
+}
+function renderDriversBackup(s) {
+  barraTarefa("drv-backup", s);
+  const btn = document.getElementById("btn-drv-backup");
+  btn.disabled = s.rodando;
+  btn.innerHTML = s.rodando ? `<span class="girando"></span> Copiando` : "Fazer backup";
+  if (s.rodando) return;
+  const alvo = document.getElementById("drv-backup");
+  if (s.erro) {
+    alvo.innerHTML = erroHtml(s.erro) + (/administrador/.test(s.erro) ? `<div style="margin-top:10px"><button class="botao" onclick="reabrirAdmin()">Reabrir como administrador</button></div>` : "");
+    return;
+  }
+  const r = s.resultado; if (!r) return;
+  alvo.innerHTML = `<div class="cartao"><div class="cab"><div><b>Backup pronto</b><div class="sub">${esc(r.pasta)}</div></div><span class="selo ok">${r.pacotes} drivers · ${r.mb} MB</span></div></div>`;
+}
+
 async function carregarWindhawk() {
   try { whDados = await api().windhawk_estado(); } catch (e) { console.error(e); whDados = null; }
   renderWindhawk();
@@ -2436,6 +3106,8 @@ async function atualizarSelos() {
     const s = await api().desempenho_selos();
     const selo = (id, mostrar, texto, cls) => { const b = document.getElementById(id); b.hidden = !mostrar; b.textContent = texto; b.className = "badge" + (cls ? " " + cls : ""); };
     selo("badge-bench", s.render || s.sim, "rodando");
+    selo("badge-bench-gpu", s.bench_gpu, "rodando");
+    selo("badge-rgb", s.rgb, "ligado");
     selo("badge-estresse", s.estresse || s.estresse_alerta, s.estresse ? "rodando" : "parou", s.estresse ? "aviso" : "critico");
     selo("badge-gargalo", s.gargalo, "coletando");
     selo("badge-overlay", s.overlay, "ligado");
@@ -3516,6 +4188,11 @@ function aoAbrirPagina(pag) {
   if (pag === "jogos") carregarJogos();
   if (pag === "biblioteca") { carregarBiblioteca(); lacoPagina("biblioteca", atualizarRodando, 5000); }
   if (pag === "windhawk") carregarWindhawk();
+  if (pag === "drivers") carregarDrivers(false);
+  if (pag === "rgb") lacoPagina("rgb", carregarRgb, () => rgbEstado?.rodando ? 1000 : 4000);
+  if (pag === "portas" && !tarefas.maker_portas?.rodando) iniciarTarefa("maker_portas");
+  if (pag === "seriais" && !tarefas.maker_seriais?.rodando) iniciarTarefa("maker_seriais");
+  if (pag === "bench_gpu") lacoPagina("bench_gpu", atualizarBenchGpu, () => bgEstado?.rodando ? 700 : 4000);
 }
 
 function iniciar() {

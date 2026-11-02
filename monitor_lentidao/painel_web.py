@@ -14,9 +14,9 @@ from urllib.parse import quote_plus
 
 import psutil
 
-from . import (aod, apps, atualizador, benchmark, biblioteca, config, discos, dispositivos, energia, estresse, gargalo, gpu, inicializacao,
-               memoria, oc, oc_cpu, otimizacao, overlay, quadros, rede, relatorio, relatorio_html, saude, sensores, sistema, windows,
-               windhawk, ram_timings)
+from . import (aod, apps, atualizador, bench_gpu, benchmark, biblioteca, config, discos, dispositivos, drivers, energia,
+               estresse, gargalo, gpu, inicializacao, maker, memoria, oc, oc_cpu, otimizacao, overlay, quadros, rede, relatorio,
+               relatorio_html, rgb, saude, sensores, sistema, windows, windhawk, ram_timings)
 from .tarefas import Tarefa
 from .programas import DICAS_PROGRAMAS, NOMES_DE_SISTEMA
 from .verificacoes import CRITICO, Monitor, Programa
@@ -157,12 +157,15 @@ class Api:
         self._ao_verificar = ao_verificar
         self._inicio = time.time()
         self._teste_memoria = memoria.TesteEmSegundoPlano()
-        self._tarefas = {n: Tarefa(n) for n in ("rede", "disco", "saude_discos", "energia", "limpeza", "sistema", "gpu",
-                                                "apps", "pawnio", "relatorio", "saude", "windhawk")}
+        self._tarefas = {n: Tarefa(n) for n in ("rede", "disco", "carregamento", "saude_discos", "energia", "limpeza", "sistema", "gpu",
+                                                "apps", "pawnio", "relatorio", "saude", "windhawk", "drivers", "drivers_wu",
+                                                "drivers_wu_instalar", "drivers_backup", "drivers_placa",
+                                                "maker_portas", "maker_seriais", "maker_acao", "rgb_conectar", "rgb_sdk")}
         self._sensores = sensores.instancia()
         self._render = benchmark.Render()
         self._sim = benchmark.SimJogo()
         self._estresse = estresse.Estresse(self._avisar)
+        self._bench_gpu = bench_gpu.BenchGpu(self._avisar)
         self._sessao_gargalo: gargalo.Sessao | None = None
         self._hardware_jogos: dict | None = None
 
@@ -177,6 +180,8 @@ class Api:
         self._sim.cancelar()
         oc_cpu.encerrar()
         ram_timings.encerrar()
+        self._bench_gpu.cancelar()
+        rgb.encerrar()
         if self._sessao_gargalo:
             self._sessao_gargalo.cancelada = True
 
@@ -276,6 +281,7 @@ class Api:
         funcoes = {
             "rede": (rede.testar,),
             "disco": (discos.testar_velocidade, str(parametro or ""), 1024),
+            "carregamento": (discos.testar_carregamento, str(parametro or "")),
             "saude_discos": (lambda progresso: discos.saude(),),
             "energia": (lambda progresso: energia.ler(),),
             "limpeza": (lambda progresso: otimizacao.limpar_memoria(),),
@@ -286,6 +292,18 @@ class Api:
             "windhawk": (windhawk.instalar,),
             "relatorio": (self._gerar_relatorio, str(parametro or "html")),
             "saude": (lambda progresso: saude.checklist(self._sensores.leitura(False)["diagnostico"]),),
+            "drivers": (lambda progresso, p: drivers.estado(progresso, bool(p.get("forcar")), bool(p.get("studio"))),
+                        dict(parametro or {})),
+            "drivers_wu": (drivers.windows_update_buscar,),
+            "drivers_wu_instalar": (lambda progresso, ids: drivers.windows_update_instalar(ids, progresso),
+                                    [str(i) for i in (parametro or [])]),
+            "drivers_backup": (drivers.backup,),
+            "drivers_placa": (drivers.instalar_placa_indice, int(parametro or 0)),
+            "maker_portas": (maker.portas,),
+            "maker_seriais": (maker.seriais,),
+            "maker_acao": (self._maker_acao, dict(parametro or {})),
+            "rgb_conectar": (lambda progresso: rgb.instancia().conectar(progresso),),
+            "rgb_sdk": (rgb.baixar_sdk_corsair,),
         }
         if nome not in funcoes:
             return False
@@ -297,7 +315,49 @@ class Api:
         return t.estado() if t else None
 
     def unidades_disco(self):
-        return {"unidades": discos.unidades(), "historico": list(reversed(discos.historico()))}
+        return {"unidades": discos.unidades(), "historico": list(reversed(discos.historico())),
+                "carregamento": list(reversed(discos.historico_carregamento()))}
+
+    @staticmethod
+    def _maker_acao(progresso, p: dict) -> dict:
+        acao = p.get("acao")
+        r = {"fantasmas": lambda: maker.remover_fantasmas([str(i) for i in p.get("ids") or []], progresso),
+             "liberar": lambda: maker.liberar_numeros(progresso), "desfazer": lambda: maker.desfazer_numeros(progresso),
+             "reinstalar": lambda: maker.reinstalar(str(p.get("id") or ""), progresso),
+             "remover_pacote": lambda: maker.remover_pacote(str(p.get("publicado") or ""), progresso),
+             "restaurar": lambda: maker.restaurar_pacotes(progresso), "ide": lambda: maker.instalar_ide(progresso)}.get(acao)
+        if not r:
+            raise ValueError("ação desconhecida")
+        return {**r(), "acao": acao}
+
+    def rgb_estado(self):
+        return rgb.instancia().estado()
+
+    def rgb_configurar(self, cfg):
+        c = dict(cfg or {})
+        try:
+            return {"ok": True, **rgb.instancia().configurar(c.get("efeito"), c.get("cor"), c.get("velocidade"), c.get("desligados"))}
+        except ValueError as e:
+            return {"ok": False, "mensagem": str(e)}
+
+    def rgb_iniciar(self):
+        return rgb.instancia().iniciar()
+
+    def rgb_parar(self):
+        return rgb.instancia().parar()
+
+    def rgb_abrir_openrgb(self):
+        return rgb.abrir_openrgb()
+
+    def maker_fechar_prendendo(self):
+        return maker.fechar_prendendo()
+
+    def maker_limpar_cache(self):
+        return maker.limpar_cache_ide()
+
+    def drivers_abrir_backup(self):
+        drivers.abrir_pasta_backup()
+        return True
 
     # ------------------------------------------------------------ otimização
 
@@ -479,6 +539,8 @@ class Api:
             return "o teste de memória"
         if self._tarefas["disco"].rodando:
             return "o teste de disco"
+        if self._bench_gpu.rodando:
+            return "o benchmark da placa de vídeo"
         return None
 
     def bench_iniciar(self, modo="ambos", sustentado=False):
@@ -505,6 +567,25 @@ class Api:
     def sim_estado(self):
         return self._sim.estado()
 
+    def bench_gpu_iniciar(self, cenas=None, resolucao="1080p", qualidade="alta"):
+        outro = self._algo_pesado_rodando()
+        if outro:
+            return {"ok": False, "mensagem": f"Espere terminar {outro}."}
+        if self._estresse.rodando or self._render.rodando:
+            return {"ok": False, "mensagem": "Pare o teste de estresse ou o benchmark do processador antes."}
+        return self._bench_gpu.iniciar(list(cenas or ["jogo", "rt"]), str(resolucao), str(qualidade))
+
+    def bench_gpu_cancelar(self):
+        self._bench_gpu.cancelar()
+        return True
+
+    def bench_gpu_estado(self):
+        return self._bench_gpu.estado()
+
+    def bench_gpu_apagar_historico(self):
+        bench_gpu.apagar_historico()
+        return True
+
     def estresse_preparar(self):
         return self._estresse.preparar()
 
@@ -526,7 +607,8 @@ class Api:
         s = self._sessao_gargalo
         return {"render": self._render.rodando, "sim": self._sim.rodando, "estresse": self._estresse.rodando,
                 "estresse_alerta": self._estresse.estado_curto(), "gargalo": bool(s and s.estado()["rodando"]),
-                "overlay": overlay.controle().ligado, "cpu": oc_cpu.em_uso(), "ram": ram_timings.em_uso()}
+                "overlay": overlay.controle().ligado, "cpu": oc_cpu.em_uso(), "ram": ram_timings.em_uso(),
+                "bench_gpu": self._bench_gpu.rodando, "rgb": bool(rgb._instancia and rgb._instancia.rodando)}
 
     def _hardware(self) -> dict:
         if self._hardware_jogos is None:

@@ -210,7 +210,34 @@ AJUSTES = [
     {"id": "janela", "titulo": "Otimizações para jogos em janela",
      "descricao": "Jogos DirectX 10/11 em janela ou sem bordas passam a usar o modo de apresentação moderno.",
      "efeito": "Menor latência e suporte a G-Sync/FreeSync em janela. Recurso do Windows 11."},
+    {"id": "mouse", "titulo": "Desligar a aceleração do mouse",
+     "descricao": "Desmarca \"Aumentar a precisão do ponteiro\": o cursor anda sempre a mesma distância para o mesmo movimento da mão.",
+     "efeito": "Mira mais consistente em jogos de tiro. A velocidade do cursor pode parecer diferente no começo.",
+     "confirmar": "Muda 3 valores do mouse no registro do seu usuário (Painel de Controle\\Mouse) e vale na hora. "
+                  "Os valores de antes ficam guardados: desligar aqui ou \"Restaurar originais\" volta exatamente como estava."},
 ]
+
+_MOUSE = r"Control Panel\Mouse"
+_MOUSE_NOMES = ("MouseThreshold1", "MouseThreshold2", "MouseSpeed")
+_MOUSE_PADRAO = ("6", "10", "1")  # padrão do Windows: aceleração ligada
+
+
+def _mouse_ler() -> list:
+    import winreg
+    return [_ler_reg(winreg.HKEY_CURRENT_USER, _MOUSE, n) for n in _MOUSE_NOMES]
+
+
+def _mouse_definir(valores) -> None:
+    """Grava os 3 valores e avisa o Windows (SPI_SETMOUSE), para valer sem sair da conta."""
+    import winreg
+    for nome, v in zip(_MOUSE_NOMES, valores):
+        _gravar_reg(winreg.HKEY_CURRENT_USER, _MOUSE, nome, None if v is None else str(v), winreg.REG_SZ)
+    try:
+        nums = (ctypes.c_int * 3)(*[int(v) if str(v or "").lstrip("-").isdigit() else int(p)
+                                    for v, p in zip(valores, _MOUSE_PADRAO)])
+        ctypes.windll.user32.SystemParametersInfoW(0x0004, 0, nums, 0x02)  # SPI_SETMOUSE, SPIF_SENDCHANGE
+    except Exception:
+        log.warning("não deu para avisar o Windows da mudança do mouse", exc_info=True)
 
 
 def _dword(id_):
@@ -234,6 +261,8 @@ def ler_ajuste(id_) -> bool:
                 _ler_reg(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled") == 0)
     if id_ == "janela":
         return _dx().get("SwapEffectUpgradeEnable") == "1"
+    if id_ == "mouse":
+        return str(_mouse_ler()[2]) == "0"
     return _dword(id_).ler()
 
 
@@ -261,6 +290,15 @@ def aplicar_ajuste(id_, ligar: bool) -> None:
         d = _dx()  # preserva as outras opções que o usuário já tinha
         d["SwapEffectUpgradeEnable"] = "1" if ligar else "0"
         _gravar_reg(winreg.HKEY_CURRENT_USER, _DX, "DirectXUserGlobalSettings", "".join(f"{k}={v};" for k, v in d.items()))
+    elif id_ == "mouse":
+        atual = _mouse_ler()
+        _guardar("mouse", [AUSENTE if v is None else str(v) for v in atual])
+        if ligar:
+            _mouse_definir(("0", "0", "0"))
+        else:
+            antes = _backup().get("mouse") or []
+            com_aceleracao = len(antes) == 3 and str(antes[2]) not in ("0", AUSENTE)
+            _mouse_definir([None if v == AUSENTE else v for v in antes] if com_aceleracao else _MOUSE_PADRAO)
     else:
         _dword(id_).aplicar(id_, ligar)
 
@@ -308,6 +346,8 @@ def restaurar_originais() -> dict:
                 _gravar_reg(winreg.HKEY_CURRENT_USER, caminho, nome, None if original == AUSENTE else int(original))
             elif chave == "janela":
                 _gravar_reg(winreg.HKEY_CURRENT_USER, _DX, "DirectXUserGlobalSettings", None if original == AUSENTE else original)
+            elif chave == "mouse":
+                _mouse_definir([None if v == AUSENTE else v for v in original])
             elif _dword(chave):
                 _dword(chave).restaurar(original)
         except OSError:
