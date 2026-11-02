@@ -1,0 +1,82 @@
+Partes deste programa foram adaptadas do ResetExplode (https://github.com/GustavoReset/ResetExplode).
+
+MIT License
+
+Copyright (c) 2026 Gustavo (GustavoReset)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+------------------------------------------------------------------------------
+Bibliotecas de sensores (pasta monitor_lentidao/nativo/lhm), distribuídas sem
+modificação, em forma binária. O texto completo das licenças está na mesma pasta
+(LICENSE-MPL-2.0.txt e LICENSE-HidSharp.txt).
+
+* LibreHardwareMonitorLib 0.9.6 · Mozilla Public License 2.0
+  © LibreHardwareMonitor e colaboradores
+  Código-fonte: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+
+* DiskInfoToolkit 1.1.2, RAMSPDToolkit-NDD 1.4.2, BlackSharp.Core 1.0.7
+  Mozilla Public License 2.0 · © Florian K. (Blacktempel)
+  Código-fonte: https://github.com/Blacktempel/DiskInfoToolkit
+                https://github.com/Blacktempel/RAMSPDToolkit
+                https://github.com/Blacktempel/BlackSharp
+
+* HidSharp 2.6.4 · Apache License 2.0
+  Copyright 2010-2025 James F. Bellinger
+  https://software.seekye.com/hidsharp
+
+* System.Buffers, System.CodeDom, System.Memory, System.Numerics.Vectors,
+  System.Runtime.CompilerServices.Unsafe, System.Security.AccessControl,
+  System.Security.Principal.Windows, System.Threading.AccessControl
+  MIT License · © Microsoft Corporation
+  https://github.com/dotnet/runtime e https://github.com/dotnet/maintenance-packages
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+* pythonnet (ponte Python ↔ .NET, já usada pela pywebview) · MIT License
+  © .NET Foundation e colaboradores · https://github.com/pythonnet/pythonnet
+
+Driver opcional PawnIO (instalado só se você clicar no botão, pelo winget):
+  https://pawnio.eu · instalado e mantido pelo próprio projeto, não vem junto.
+
+* Módulos do PawnIO (nativo/pawnio: RyzenSMU.bin, IntelMSR.bin, AMDFamily17.bin) · GNU LGPL 2.1 ou posterior
+  © namazso e colaboradores · https://github.com/namazso/PawnIO.Modules
+  Distribuídos como vêm (compilados e assinados pelo autor), sem alteração. O código-fonte está no
+  endereço acima; os termos da licença estão em https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+  Eles só funcionam com o driver PawnIO instalado e limitam o que o monitor pode fazer no processador.
+
+* Endereços e comandos do SMU dos Ryzen 7000/9000: fatos técnicos documentados pela comunidade
+  (ZenStates-Core, ryzen_smu). Nenhum código desses projetos foi copiado.

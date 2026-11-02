@@ -1,0 +1,74 @@
+# Gera o instalador DestiniSetup.exe e a versão portátil num Windows do GitHub a cada push na main
+# e publica na release "latest" (aba Releases do repositório).
+name: Compilar .exe
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Um build por vez: o segundo espera o primeiro publicar.
+concurrency:
+  group: compilar
+  cancel-in-progress: false
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Marcar o número do build (o monitor usa para saber se há versão nova)
+        shell: bash
+        run: printf 'BUILD = %s\nCOMMIT = "%s"\n' "${{ github.run_number }}" "${GITHUB_SHA::7}" > monitor_lentidao/_build.py
+      - name: Instalar dependências
+        run: python -m pip install --upgrade -r requirements.txt pyinstaller
+      - name: Testar se importa
+        run: python -c "import clr, monitor_lentidao.painel_web, monitor_lentidao.discos, monitor_lentidao.rede, monitor_lentidao.otimizacao, monitor_lentidao.sensores, monitor_lentidao.gpu, monitor_lentidao.sistema, monitor_lentidao.dispositivos, monitor_lentidao.apps, monitor_lentidao.saude, monitor_lentidao.relatorio_html, monitor_lentidao.benchmark, monitor_lentidao.estresse, monitor_lentidao.gargalo, monitor_lentidao.windhawk, monitor_lentidao.quadros, monitor_lentidao.overlay, monitor_lentidao.oc, monitor_lentidao.biblioteca, monitor_lentidao.pawnio, monitor_lentidao.oc_cpu, monitor_lentidao.oc_ryzen, monitor_lentidao.oc_intel, monitor_lentidao.ram_timings, monitor_lentidao.aod, monitor_lentidao.atualizador, monitor_lentidao.bandeja; from monitor_lentidao import atualizador; assert atualizador.BUILD > 0"
+      - name: Gerar o programa
+        run: >
+          python -m PyInstaller --noconfirm --onedir --noconsole --name MonitorLentidao
+          --icon monitor_lentidao\ui\marca\icone.ico
+          --hidden-import pystray._win32 --hidden-import clr --hidden-import monitor_lentidao._build --collect-all webview
+          --collect-all pythonnet --collect-all clr_loader
+          --add-data "monitor_lentidao\ui;monitor_lentidao\ui"
+          --add-data "monitor_lentidao\nativo\lhm\*.dll;monitor_lentidao\nativo\lhm"
+          --add-data "monitor_lentidao\nativo\pawnio\*.bin;monitor_lentidao\nativo\pawnio"
+          --add-binary "monitor_lentidao\nativo\memteste.dll;monitor_lentidao\nativo"
+          --add-binary "monitor_lentidao\nativo\estavel.dll;monitor_lentidao\nativo"
+          MonitorLentidao.pyw
+      - name: Gerar o instalador
+        shell: pwsh
+        run: |
+          $versao = python -c "import monitor_lentidao as m; print(m.__version__)"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc /Qp "/DVersao=$versao" instalador.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Compress-Archive -Path dist\MonitorLentidao\* -DestinationPath dist\MonitorLentidao-portatil.zip
+          $setup = Get-Item dist\DestiniSetup.exe
+          $info = [ordered]@{ versao = $versao; build = [int]$env:GITHUB_RUN_NUMBER; commit = $env:GITHUB_SHA.Substring(0, 7)
+                              sha256 = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower(); tamanho = $setup.Length }
+          $info | ConvertTo-Json | Set-Content -Encoding utf8NoBOM dist\versao.json
+          "VERSAO=$versao" >> $env:GITHUB_ENV
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Destini
+          path: |
+            dist/DestiniSetup.exe
+            dist/MonitorLentidao-portatil.zip
+            dist/versao.json
+      - name: Publicar na release "latest"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest dist/DestiniSetup.exe dist/MonitorLentidao-portatil.zip dist/versao.json \
+            --title "Versão $VERSAO (build ${{ github.run_number }})" \
+            --notes "Baixe o DestiniSetup.exe e instale. Depois disso o monitor se atualiza sozinho ao abrir. A versão portátil é o .zip. Gerado a partir do commit ${GITHUB_SHA::7}." --latest

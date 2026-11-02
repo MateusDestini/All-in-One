@@ -1,0 +1,9 @@
+Módulos do PawnIO (https://pawnio.eu), assinados pelo autor do PawnIO, copiados de
+LibreHardwareMonitor (LibreHardwareMonitorLib/Resources/PawnIo). Código-fonte:
+https://github.com/namazso/PawnIO.Modules (licença LGPL-2.1 ou posterior).
+
+- RyzenSMU.bin: comandos ao SMU dos processadores Ryzen (limites PBO, Curve Optimizer, boost).
+- AMDFamily17.bin: leitura de registradores SMN (topologia de núcleos e timings da RAM no Ryzen).
+- IntelMSR.bin: leitura e escrita de MSRs permitidos (limites de energia, undervolt, IccMax).
+
+O driver PawnIO em si não vem junto: é instalado pelo winget (namazso.PawnIO) e só roda módulos assinados.

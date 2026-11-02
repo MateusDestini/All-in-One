@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Estresse da placa de vídeo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  .hud { position: fixed; left: 14px; top: 12px; background: rgba(0,0,0,.55); padding: 8px 12px; border-radius: 8px; line-height: 1.55; pointer-events: none; }
+  .hud b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .dica { position: fixed; right: 14px; bottom: 12px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 8px; color: #ccc; }
+  .erro { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 40px; font-size: 16px; }
+</style>
+</head>
+<body>
+<canvas id="tela"></canvas>
+<div class="hud"><b id="fps">—</b> quadros/s<br><span id="info">Preparando...</span><br><span id="placa" style="color:#aaa"></span></div>
+<div class="dica">Esc ou fechar a janela para parar</div>
+<script>
+// Configuração colocada pelo monitor: {largura, altura, passos}. largura 0 = tela cheia na resolução do monitor.
+const CFG = /*CONFIG*/null || {largura: 1280, altura: 720, passos: 96};
+const api = () => window.pywebview && window.pywebview.api;
+
+const VS = `#version 300 es
+in vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }`;
+
+// Toro "peludo" desenhado por raymarching volumétrico: cada pixel avalia ruído fractal dezenas de vezes.
+// O trabalho por pixel é fixo (sem saída antecipada) para a carga ficar estável.
+const FS_PESADO = `#version 300 es
+precision highp float;
+uniform vec2 res; uniform float t; uniform int passos;
+out vec4 cor;
+float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float ruido(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * ruido(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+mat3 giro(float a, float b) {
+  float ca = cos(a), sa = sin(a), cb = cos(b), sb = sin(b);
+  return mat3(ca, 0.0, -sa, 0.0, 1.0, 0.0, sa, 0.0, ca) * mat3(1.0, 0.0, 0.0, 0.0, cb, sb, 0.0, -sb, cb);
+}
+void main() {
+  vec2 uv = (gl_FragCoord.xy * 2.0 - res) / res.y;
+  mat3 m = giro(t * 0.45, 0.6 + 0.35 * sin(t * 0.3));
+  vec3 ro = m * vec3(0.0, 0.0, 3.3), rd = m * normalize(vec3(uv, -1.7));
+  vec3 luz = normalize(vec3(cos(t * 0.7), 0.8, sin(t * 0.7)));
+  vec3 fundo = mix(vec3(0.02, 0.03, 0.06), vec3(0.10, 0.12, 0.20), 0.5 + 0.5 * uv.y);
+  float dt = 2.8 / float(passos), dist = 1.9, dens = 0.0;
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 512; i++) {
+    if (i >= passos) break;
+    vec3 p = ro + rd * dist;
+    vec2 q = vec2(length(p.xz) - 1.0, p.y);
+    float d = length(q) - 0.40;
+    if (d < 0.32) {
+      float camada = clamp(1.0 - (d + 0.04) / 0.36, 0.0, 1.0);
+      float f = fbm(p * 11.0 + vec3(0.0, t * 0.5, 0.0));
+      float a = smoothstep(0.55, 0.85, f * 0.9 + camada * 0.45) * dt * 14.0 * camada;
+      vec3 c = vec3(normalize(p.xz), 0.0).xzy;
+      vec3 n = normalize(p - c);
+      float lamb = 0.30 + 0.70 * max(dot(n, luz), 0.0);
+      vec3 pelo = mix(vec3(0.85, 0.30, 0.05), vec3(1.0, 0.82, 0.45), camada) * lamb;
+      acc += (1.0 - dens) * a * pelo;
+      dens += (1.0 - dens) * a;
+    }
+    dist += dt;
+  }
+  cor = vec4(acc + fundo * (1.0 - dens), 1.0);
+}`;
+
+const FS_MOSTRA = `#version 300 es
+precision highp float;
+uniform sampler2D img; uniform vec2 res; out vec4 cor;
+void main() { vec3 c = texture(img, gl_FragCoord.xy / res).rgb; cor = vec4(pow(c, vec3(0.9)), 1.0); }`;
+
+const tela = document.getElementById("tela");
+let gl, progPesado, progMostra, fbo, textura, uPesado, uMostra;
+let largura, altura, camadas = 1, quadrosTotal = 0, base = 0, mediaIntervalo = 0, anterior = 0, amostrasBase = 0;
+let janelaQuadros = 0, janelaTempo = performance.now(), fpsAtual = 0, telaFps = 0, renderizador = "", parado = false;
+
+function falhar(msg) {
+  parado = true;
+  document.body.insertAdjacentHTML("beforeend", `<div class="erro">${msg}</div>`);
+  const a = api(); if (a) a.falha(msg);
+}
+
+function compilar(fonte, tipo) {
+  const s = gl.createShader(tipo); gl.shaderSource(s, fonte); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function programa(fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compilar(VS, gl.VERTEX_SHADER)); gl.attachShader(p, compilar(fs, gl.FRAGMENT_SHADER));
+  gl.bindAttribLocation(p, 0, "p"); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+function preparar() {
+  largura = CFG.largura || Math.round(screen.width * devicePixelRatio);
+  altura = CFG.altura || Math.round(screen.height * devicePixelRatio);
+  tela.width = largura; tela.height = altura;
+  gl = tela.getContext("webgl2", {antialias: false, alpha: false, depth: false, powerPreference: "high-performance"});
+  if (!gl) return falhar("O WebGL 2 não está disponível nesta placa de vídeo ou driver.");
+  tela.addEventListener("webglcontextlost", e => { e.preventDefault(); falhar("o driver de vídeo reiniciou durante o teste"); });
+  const info = gl.getExtension("WEBGL_debug_renderer_info");
+  renderizador = (info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || "";
+  document.getElementById("placa").textContent = renderizador;
+  progPesado = programa(FS_PESADO); progMostra = programa(FS_MOSTRA);
+  uPesado = {res: gl.getUniformLocation(progPesado, "res"), t: gl.getUniformLocation(progPesado, "t"), passos: gl.getUniformLocation(progPesado, "passos")};
+  uMostra = {res: gl.getUniformLocation(progMostra, "res"), img: gl.getUniformLocation(progMostra, "img")};
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  // Acumula as camadas numa textura de ponto flutuante (sem faixas); sem a extensão, usa 8 bits.
+  const flutuante = gl.getExtension("EXT_color_buffer_float");
+  textura = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, textura);
+  gl.texImage2D(gl.TEXTURE_2D, 0, flutuante ? gl.RGBA16F : gl.RGBA8, largura, altura, 0, gl.RGBA, flutuante ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textura, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) return falhar("Não foi possível preparar o desenho fora da tela.");
+  requestAnimationFrame(quadro);
+}
+
+// Desenha N camadas por quadro e ajusta N para a placa ficar sempre no limite (quadros da tela entre ~35 e 45 por segundo).
+function quadro(agora) {
+  if (parado) return;
+  if (anterior) {
+    const dt = agora - anterior;
+    if (amostrasBase < 30) { base = base ? Math.min(base, dt) : dt; amostrasBase++; }
+    mediaIntervalo = mediaIntervalo ? mediaIntervalo * 0.85 + dt * 0.15 : dt;
+    if (amostrasBase >= 10) {
+      const alvo = Math.max(base * 1.6, 22);
+      if (mediaIntervalo < alvo) camadas = Math.min(600, camadas + Math.max(1, Math.round(camadas * 0.06)));
+      else if (mediaIntervalo > alvo * 1.35) camadas = Math.max(1, Math.floor(camadas * 0.85));
+    }
+  }
+  anterior = agora;
+  const t = agora / 1000;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, largura, altura);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(progPesado);
+  gl.uniform2f(uPesado.res, largura, altura); gl.uniform1i(uPesado.passos, CFG.passos);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE); gl.blendColor(0, 0, 0, 1 / camadas);
+  for (let i = 0; i < camadas; i++) { gl.uniform1f(uPesado.t, t + i * 0.0008); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+  gl.disable(gl.BLEND);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, largura, altura);
+  gl.useProgram(progMostra); gl.uniform2f(uMostra.res, largura, altura);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, textura); gl.uniform1i(uMostra.img, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  quadrosTotal += camadas; janelaQuadros += camadas; telaFps++;
+  if (agora - janelaTempo >= 500) {
+    fpsAtual = janelaQuadros * 1000 / (agora - janelaTempo);
+    const fpsTela = telaFps * 1000 / (agora - janelaTempo);
+    document.getElementById("fps").textContent = Math.round(fpsAtual);
+    document.getElementById("info").textContent = `${largura}×${altura} · ${camadas} camadas por quadro · tela ${Math.round(fpsTela)} fps`;
+    const a = api(); if (a) a.relatar(fpsAtual, quadrosTotal, renderizador);
+    janelaQuadros = 0; telaFps = 0; janelaTempo = agora;
+  }
+  requestAnimationFrame(quadro);
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") { const a = api(); if (a) a.fechar(); } });
+try { preparar(); } catch (e) { falhar("Falha ao preparar o teste: " + e.message); }
+</script>
+</body>
+</html>
