@@ -3684,7 +3684,7 @@ function analiseRamHtml(an) {
       <table class="aida ram-analise"><tr><th>Timing</th><th>Agora</th><th>Tempo</th><th>Situação</th><th>Referência</th></tr>${linhas}</table>${canais}</div>`;
 }
 // ----- gravação na BIOS (interface AOD da AMD)
-let ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
+var ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
 const TENSAO_BIOS = new Set(["vdd", "vddq", "vpp"]);
 async function carregarRamBios(forcar) {
   if (ramBiosCarregando) return;
