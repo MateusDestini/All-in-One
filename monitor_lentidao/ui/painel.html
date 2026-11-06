@@ -1365,6 +1365,8 @@
 </div>
 
 <script>
+var ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
+var TENSAO_BIOS = new Set(["vdd", "vddq", "vpp"]);
 const api = () => window.pywebview.api;
 const COR = { ok: "var(--ok)", aviso: "var(--aviso)", critico: "var(--critico)" };
 const historicoMedidores = {};
@@ -3685,8 +3687,6 @@ function analiseRamHtml(an) {
       <table class="aida ram-analise"><tr><th>Timing</th><th>Agora</th><th>Tempo</th><th>Situação</th><th>Referência</th></tr>${linhas}</table>${canais}</div>`;
 }
 // ----- gravação na BIOS (interface AOD da AMD)
-var ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
-const TENSAO_BIOS = new Set(["vdd", "vddq", "vpp"]);
 async function carregarRamBios(forcar) {
   if (ramBiosCarregando) return;
   ramBiosCarregando = true;
