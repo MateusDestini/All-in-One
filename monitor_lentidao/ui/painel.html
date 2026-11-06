@@ -3620,6 +3620,7 @@ async function carregarRam(forcar) {
             else { banner.style.display = 'none'; banner.innerHTML = ''; }
           }
         }).catch(function(){});
+        if (typeof carregarRamBios === 'function') { try { carregarRamBios(); } catch(e2) { console.error(e2); } }
       } catch(e) { console.error(e); }
     }, 50); }
   catch (e) { console.error(e); document.getElementById("ram-conteudo").innerHTML = `<div class="vazio">Não consegui ler a memória: ${esc(String(e))}</div>`; }
