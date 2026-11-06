@@ -4257,7 +4257,7 @@ function aoAbrirPagina(pag) {
   if (pag === "gargalo") lacoPagina("gargalo", atualizarGargalo, 1000, () => api().gargalo_sair());
   if (pag === "nvidia" || pag === "amd") { carregarOc(pag); lacoPagina(pag, async () => agoraOc(pag), 2000); }
   if (pag === "cpu") { carregarOc("cpu", true); lacoPagina("cpu", atualizarCpu, () => cpuOcupado() ? 1000 : 3000); }
-  if (pag === "ram") { carregarRam(); if (!ramBios) carregarRamBios(); lacoPagina("ram", atualizarRam, () => ramOcupado() ? 1000 : 4000); }
+  if (pag === "ram") { carregarRam(); if (typeof ramBios === "undefined" || !ramBios) carregarRamBios(); lacoPagina("ram", atualizarRam, () => ramOcupado() ? 1000 : 4000); }
   if (pag === "overlay") lacoPagina("overlay", atualizarOverlay, 1000, () => api().overlay_acompanhar(false));
   if (pag === "jogos") carregarJogos();
   if (pag === "biblioteca") { carregarBiblioteca(); lacoPagina("biblioteca", atualizarRodando, 5000); }
