@@ -38,6 +38,12 @@ class JanelaWeb:
             "Destini · Monitor de Lentidão", html=html_pagina(), js_api=self._api,
             width=1200, height=820, min_size=(960, 640), background_color="#000000")
         self._janela.events.closing += self._fechando
+        try:
+            import webview.platforms.edgechromium as ec
+            if hasattr(ec, "_clear_cache"):
+                ec._clear_cache()
+        except Exception:
+            pass
         self._webview.start(private_mode=True)
 
     def _fechando(self):
