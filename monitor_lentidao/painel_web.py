@@ -15,8 +15,8 @@ from urllib.parse import quote_plus
 import psutil
 
 from . import (aod, apps, atualizador, bench_gpu, benchmark, biblioteca, config, discos, dispositivos, drivers, energia,
-               estresse, gargalo, gpu, inicializacao, maker, memoria, oc, oc_cpu, otimizacao, overlay, quadros, rede, relatorio,
-               relatorio_html, rgb, saude, sensores, sistema, windows, windhawk, ram_timings)
+               estresse, gargalo, gpu, inicializacao, maker, memoria, oc, oc_cpu, otimizacao, overlay, quadros, ram_auto, rede,
+               relatorio, relatorio_html, rgb, saude, sensores, sistema, windows, windhawk, ram_timings)
 from .tarefas import Tarefa
 from .programas import DICAS_PROGRAMAS, NOMES_DE_SISTEMA
 from .verificacoes import CRITICO, Monitor, Programa
@@ -727,6 +727,28 @@ class Api:
 
     def ram_bios_reiniciar(self):
         return aod.reiniciar_pc()
+
+    # ------------------------------------------------------------ auto-tune de RAM (loop automático via AOD)
+    def ram_auto_estado(self):
+        return ram_auto.estado()
+
+    def ram_auto_iniciar(self, niveis=None):
+        return ram_auto.iniciar(niveis)
+
+    def ram_auto_pausar(self):
+        return ram_auto.pausar()
+
+    def ram_auto_cancelar(self):
+        return ram_auto.cancelar()
+
+    def ram_auto_continuar(self):
+        return ram_auto.continuar()
+
+    def ram_auto_pular(self):
+        return ram_auto.pular()
+
+    def ram_auto_relatorio(self):
+        return ram_auto.relatorio()
 
     def oc_erros(self):
         return oc.erros_recentes()

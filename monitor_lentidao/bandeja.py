@@ -11,7 +11,7 @@ import pystray
 
 from PIL import Image, ImageDraw
 
-from . import atualizador, config, dispositivos, oc, oc_cpu, overlay, relatorio, windows
+from . import atualizador, config, dispositivos, oc, oc_cpu, overlay, ram_auto, relatorio, windows
 from .janelas import JanelaTk, criar_janela
 from .verificacoes import CRITICO, Monitor, Problema
 
@@ -134,6 +134,15 @@ class App:
             texto = oc_cpu.verificar_queda()
             if texto:
                 self.notificar("Ajuste automático do processador", texto + " Ele está na aba Processador do painel.")
+        # Verifica estado do auto-tune da RAM após reboot
+        if not getattr(self, "_ram_auto_visto", False):
+            self._ram_auto_visto = True
+            try:
+                msg_ram = ram_auto.verificar_estado()
+                if msg_ram:
+                    self.notificar("Auto-tune da RAM", msg_ram + " Abra o painel para continuar.")
+            except Exception:
+                pass
         r = oc.resultado_inicio()
         if r:
             self.notificar("Overclock aplicado ao iniciar", r["texto"])

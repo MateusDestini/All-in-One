@@ -3640,6 +3640,7 @@ function renderRam() {
   el.innerHTML = `<div class="oc-grade">${juntos ? `<div class="ram-col">${kitHtml}${diag}</div>` : kitHtml}<div class="caixa"><h3>Rodando agora</h3>${atualRamHtml(a, r, plat)}</div></div>
     ${!juntos && diag ? `<div style="margin-top:14px">${diag}</div>` : ""}
     ${analiseRamHtml(d.analise)}
+    <div id="ram-auto-banner" style="display:none;margin-bottom:18px"></div>
     <div class="tit-secao"><h2>Sugestões para a BIOS</h2><span class="sub">${d.latencia_medida ? `Estimativas a partir da sua latência medida (${fmtN(d.latencia_medida)} ns).` : "Rode o teste abaixo para as estimativas usarem a sua latência medida."}</span></div>
     <div class="sub" style="line-height:1.55;margin:-4px 0 12px">Os timings só mudam na BIOS. Antes, salve o perfil atual dela (Save Profile). Mude um nível por vez e teste aqui. Se o PC não ligar, espere: a placa tenta algumas vezes e volta sozinha; se não voltar, limpe a CMOS.</div>
     <div class="ram-niveis">${(d.sugestoes.niveis || []).map(nivelRamHtml).join("")}</div>
@@ -3649,6 +3650,15 @@ function renderRam() {
     <div class="caixa" id="ram-teste">${testeRamHtml()}</div>
     <div id="ram-hist">${historicoRamHtml()}</div>`;
 }
+  // Renderiza banner do auto-tune se ativo
+  api().ram_auto_estado().then(auto => {
+    const banner = document.getElementById('ram-auto-banner');
+    if (banner) {
+      const html = ramAutoBannerHtml(auto);
+      if (html) { banner.style.display = 'block'; banner.innerHTML = html; }
+      else { banner.style.display = 'none'; banner.innerHTML = ''; }
+    }
+  }).catch(() => {});
 function analiseRamHtml(an) {
   if (!an || !an.itens || !an.itens.length) return "";
   const c = an.contagem || {};
@@ -3880,6 +3890,68 @@ function copiarNivelRam(id) {
   const texto = `${n.nome} (${tituloKit(ramDados.kit.resumo)})\n` + n.itens.map(i => `- ${i.campo}${i.bios ? ` [${i.bios}]` : ""}: ${i.valor}`).join("\n");
   (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject()).then(() => toast("Lista copiada. Cole num bloco de notas ou tire foto antes de entrar na BIOS."),
     () => toast("Não consegui copiar."));
+}
+
+// ------------------------------------------------------------------ Auto-tune de RAM
+let _ramAutoTimer = null;
+const FASES_RAM = {planejamento:"Planejando",aplicar:"Gravando na BIOS",aguardando_boot:"Reiniciando…",teste:"Testando estabilidade",decisao:"Analisando resultado",final:"Concluído",pausado:"Pausado",ocioso:""};
+
+async function ramAutoIniciar() {
+  confirmar("Iniciar auto-tune completo?",
+    "O programa vai gravar perfis progressivamente mais agressivos na BIOS, reiniciar o PC automaticamente e testar estabilidade ao voltar. Se algum perfil falhar, reverte sozinho para o último estável. Duração estimada: 2–3 horas. Não use o PC durante o teste. Cancelar a qualquer momento reverte tudo.",
+    "Iniciar auto-tune", async () => {
+      const r = await api().ram_auto_iniciar();
+      toast(r.mensagem);
+      if (r.ok) carregarRam(true);
+    });
+}
+async function ramAutoPausar() {
+  const r = await api().ram_auto_pausar(); toast(r.mensagem); carregarRam(true);
+}
+async function ramAutoCancelar() {
+  confirmar("Cancelar e reverter?", "Reverte todos os timings para o estado original e para o auto-tune.", "Cancelar e reverter", async () => {
+    const r = await api().ram_auto_cancelar(); toast(r.mensagem); carregarRam(true);
+  });
+}
+async function ramAutoContinuar() {
+  const r = await api().ram_auto_continuar(); toast(r.mensagem); carregarRam(true);
+}
+async function ramAutoPular() {
+  const r = await api().ram_auto_pular(); toast(r.mensagem); carregarRam(true);
+}
+
+function ramAutoBannerHtml(auto) {
+  if (!auto || auto.fase === "ocioso") return "";
+  const fase = FASES_RAM[auto.fase] || auto.fase;
+  const nivel = auto.nivel_atual ? auto.nivel_atual.charAt(0).toUpperCase() + auto.nivel_atual.slice(1) : "";
+  const progresso = auto.fila && auto.nivel_atual ? Math.round(((auto.fila.indexOf(auto.nivel_atual)) / auto.fila.length) * 100) : 0;
+  let detalhe = "";
+  if (auto.fase === "teste" && auto.teste && auto.teste.rodando) {
+    detalhe = `${auto.teste.etapa} · ${Math.round(auto.teste.progresso * 100)}%`;
+  } else if (auto.fase === "aguardando_boot") {
+    detalhe = "O PC vai reiniciar agora. Não desligue.";
+  } else if (auto.fase === "pausado" && auto.pausa) {
+    detalhe = auto.pausa.motivo;
+  } else if (auto.fase === "final") {
+    const rel = auto.resultados || {};
+    const estaveis = Object.entries(rel).filter(([,v]) => v && v.estavel).length;
+    detalhe = `${estaveis} perfil(is) estável(is) encontrado(s).`;
+  }
+  const botoes = auto.fase === "pausado"
+    ? `<button class="botao primario" onclick="ramAutoContinuar()">Continuar</button><button class="botao" onclick="ramAutoPular()">Pular nível</button>`
+    : auto.fase === "final"
+    ? `<button class="botao" onclick="carregarRam(true)">Ver relatório</button>`
+    : `<button class="botao" onclick="ramAutoPausar()">Pausar</button><button class="botao" onclick="ramAutoPular()">Pular nível</button>`;
+  return `<div class="caixa" style="border-color:var(--accent);margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <h3 style="margin:0">Auto-tune: ${esc(nivel)}</h3>
+      <span class="chip">${esc(fase)}</span>
+      ${auto.reboots_realizados ? `<span class="sub" style="margin-left:auto">${auto.reboots_realizados} reboot(s)</span>` : ""}
+    </div>
+    ${detalhe ? `<div class="sub" style="margin-bottom:10px;line-height:1.5">${esc(detalhe)}</div>` : ""}
+    <div class="barra"><div class="trilho"><div class="enche" style="width:${progresso}%"></div></div></div>
+    <div class="oc-acoes" style="margin-top:12px">${botoes}<button class="botao perigo" onclick="ramAutoCancelar()">Cancelar e reverter</button></div>
+  </div>`;
 }
 function testeRamHtml() {
   const t = ramDados && ramDados.teste, a = (ramDados && ramDados.atual) || {};

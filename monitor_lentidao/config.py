@@ -37,6 +37,11 @@ PADRAO = {
     "inicializacao_lenta_s": 120,
     # Processos que nunca devem gerar alerta (nome do executável, minúsculo)
     "ignorar_processos": ["system idle process", "idle", "memory compression", "registry"],
+    # Auto-tune de RAM (loop automático via AOD)
+    "ram_auto_niveis": ["perfil", "afinado", "agressivo"],
+    "ram_auto_minutos": {"perfil": 5, "afinado": 15, "agressivo": 30},
+    "ram_auto_temp_max": {"DDR5": 55, "DDR4": 60},
+    "ram_auto_max_falhas": 3,
 }
 
 
