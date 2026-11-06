@@ -1366,7 +1366,6 @@
 
 <script>
 var ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
-var TENSAO_BIOS = new Set(["vdd", "vddq", "vpp"]);
 const api = () => window.pywebview.api;
 const COR = { ok: "var(--ok)", aviso: "var(--aviso)", critico: "var(--critico)" };
 const historicoMedidores = {};
@@ -3612,19 +3611,7 @@ async function carregarRam(forcar) {
   if (ramCarregando) return;
   ramCarregando = true;
   if (forcar) document.getElementById("ram-conteudo").innerHTML = `<div class="vazio">Lendo os pentes e o controlador de memória...</div>`;
-  try { ramDados = await api().ram_estado(!!forcar); renderRam(); setTimeout(function() {
-      try {
-        api().ram_auto_estado().then(function(auto) {
-          var banner = document.getElementById('ram-auto-banner');
-          if (banner && typeof ramAutoBannerHtml === 'function') {
-            var html = ramAutoBannerHtml(auto);
-            if (html) { banner.style.display = 'block'; banner.innerHTML = html; }
-            else { banner.style.display = 'none'; banner.innerHTML = ''; }
-          }
-        }).catch(function(){});
-        if (typeof carregarRamBios === 'function') { try { carregarRamBios(); } catch(e2) { console.error(e2); } }
-      } catch(e) { console.error(e); }
-    }, 50); }
+  try { ramDados = await api().ram_estado(!!forcar); renderRam(); setTimeout(function(){ try { if (typeof carregarRamBios === "function") carregarRamBios(); } catch(e){ console.error(e); } }, 50); }
   catch (e) { console.error(e); document.getElementById("ram-conteudo").innerHTML = `<div class="vazio">Não consegui ler a memória: ${esc(String(e))}</div>`; }
   finally { ramCarregando = false; }
 }
@@ -3664,6 +3651,15 @@ function renderRam() {
     <div class="caixa" id="ram-teste">${testeRamHtml()}</div>
     <div id="ram-hist">${historicoRamHtml()}</div>`;
 }
+  // Renderiza banner do auto-tune se ativo
+  api().ram_auto_estado().then(auto => {
+    const banner = document.getElementById('ram-auto-banner');
+    if (banner) {
+      const html = ramAutoBannerHtml(auto);
+      if (html) { banner.style.display = 'block'; banner.innerHTML = html; }
+      else { banner.style.display = 'none'; banner.innerHTML = ''; }
+    }
+  }).catch(() => {});
 function analiseRamHtml(an) {
   if (!an || !an.itens || !an.itens.length) return "";
   const c = an.contagem || {};
@@ -3687,6 +3683,7 @@ function analiseRamHtml(an) {
       <table class="aida ram-analise"><tr><th>Timing</th><th>Agora</th><th>Tempo</th><th>Situação</th><th>Referência</th></tr>${linhas}</table>${canais}</div>`;
 }
 // ----- gravação na BIOS (interface AOD da AMD)
+const TENSAO_BIOS = new Set(["vdd", "vddq", "vpp"]);
 async function carregarRamBios(forcar) {
   if (ramBiosCarregando) return;
   ramBiosCarregando = true;
