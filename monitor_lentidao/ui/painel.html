@@ -3656,7 +3656,7 @@ function renderRam() {
     <div class="sub" style="line-height:1.55;margin:-4px 0 12px">Os timings só mudam na BIOS. Antes, salve o perfil atual dela (Save Profile). Mude um nível por vez e teste aqui. Se o PC não ligar, espere: a placa tenta algumas vezes e volta sozinha; se não voltar, limpe a CMOS.</div>
     <div class="ram-niveis">${(d.sugestoes.niveis || []).map(nivelRamHtml).join("")}</div>
     <div class="tit-secao"><h2>Gravar na BIOS pelo Windows</h2><span class="sub">como o Ryzen Master: vale no próximo boot</span></div>
-    <div id="ram-bios">${ramBiosHtml()}</div>
+    <div id="ram-bios"><div class="vazio">Carregando ajustes da BIOS...</div></div>
     <div class="tit-secao"><h2>Testar a configuração atual</h2></div>
     <div class="caixa" id="ram-teste">${testeRamHtml()}</div>
     <div id="ram-hist">${historicoRamHtml()}</div>`;
