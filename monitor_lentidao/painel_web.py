@@ -23,8 +23,12 @@ from .verificacoes import CRITICO, Monitor, Programa
 
 log = logging.getLogger(__name__)
 
-PAGINA = Path(__file__).resolve().parent / "ui" / "painel.html"
-PASTA_MARCA = PAGINA.parent / "marca"
+import sys as _sys
+if getattr(_sys, 'frozen', False) and hasattr(_sys, '_MEIPASS'):
+    PAGINA = Path(_sys._MEIPASS) / 'monitor_lentidao' / 'ui' / 'painel.html'
+else:
+    PAGINA = Path(__file__).resolve().parent / 'ui' / 'painel.html'
+PASTA_MARCA = PAGINA.parent / "marca"  # works for both dev and frozen
 
 
 def html_pagina() -> str:
