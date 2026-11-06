@@ -1368,7 +1368,13 @@
 </div>
 
 <script data-v="1793937522">
-var ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
+// GUARD CLAUSE: garante que ramBios exista mesmo se o script falhar parcialmente
+if (typeof window.ramBios === 'undefined') { window.ramBios = null; }
+if (typeof window.ramBiosNovo === 'undefined') { window.ramBiosNovo = {}; }
+if (typeof window.ramBiosCarregando === 'undefined') { window.ramBiosCarregando = false; }
+if (typeof window.ramBiosOrigem === 'undefined') { window.ramBiosOrigem = ''; }
+if (typeof window.ramBiosTurnaround === 'undefined') { window.ramBiosTurnaround = false; }
+var ramBios = window.ramBios, ramBiosNovo = window.ramBiosNovo, ramBiosCarregando = window.ramBiosCarregando, ramBiosOrigem = window.ramBiosOrigem, ramBiosTurnaround = window.ramBiosTurnaround;
 const api = () => window.pywebview.api;
 const COR = { ok: "var(--ok)", aviso: "var(--aviso)", critico: "var(--critico)" };
 const historicoMedidores = {};
