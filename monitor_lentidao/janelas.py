@@ -38,13 +38,9 @@ class JanelaWeb:
             "Destini · Monitor de Lentidão", html=html_pagina(), js_api=self._api,
             width=1200, height=820, min_size=(960, 640), background_color="#000000")
         self._janela.events.closing += self._fechando
-        import tempfile, os
-        _tmp = os.path.join(tempfile.gettempdir(), 'destini_wv_' + str(os.getpid()))
-        try:
-            self._webview.start(private_mode=True, storage_path=_tmp)
-        except TypeError:
-            # Fallback para versões antigas do pywebview sem storage_path
-            self._webview.start(private_mode=True)
+        # A página vai como texto (html=), então não há cache de arquivo para limpar. Uma pasta de perfil nova por
+        # processo deixava uma cópia do WebView2 (dezenas de MB) no %TEMP% a cada vez que o monitor abria.
+        self._webview.start()
 
     def _fechando(self):
         if self._saindo:

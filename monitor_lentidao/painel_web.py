@@ -282,36 +282,43 @@ class Api:
     # ------------------------------------------------------------ tarefas demoradas (testes)
 
     def iniciar_tarefa(self, nome, parametro=None):
+        p = parametro
+        # cada entrada monta os argumentos só quando é a tarefa pedida: antes o dicionário inteiro era montado de uma
+        # vez e int()/dict()/list() de um parâmetro de outro tipo derrubava qualquer tarefa com parâmetro
         funcoes = {
-            "rede": (rede.testar,),
-            "disco": (discos.testar_velocidade, str(parametro or ""), 1024),
-            "carregamento": (discos.testar_carregamento, str(parametro or "")),
-            "saude_discos": (lambda progresso: discos.saude(),),
-            "energia": (lambda progresso: energia.ler(),),
-            "limpeza": (lambda progresso: otimizacao.limpar_memoria(),),
-            "sistema": (lambda progresso: sistema.coletar(),),
-            "gpu": (lambda progresso: gpu.coletar(),),
-            "apps": (apps.instalar, list(parametro or [])),
-            "pawnio": (sensores.instalar_pawnio,),
-            "windhawk": (windhawk.instalar,),
-            "relatorio": (self._gerar_relatorio, str(parametro or "html")),
-            "saude": (lambda progresso: saude.checklist(self._sensores.leitura(False)["diagnostico"]),),
-            "drivers": (lambda progresso, p: drivers.estado(progresso, bool(p.get("forcar")), bool(p.get("studio"))),
-                        dict(parametro or {})),
-            "drivers_wu": (drivers.windows_update_buscar,),
-            "drivers_wu_instalar": (lambda progresso, ids: drivers.windows_update_instalar(ids, progresso),
-                                    [str(i) for i in (parametro or [])]),
-            "drivers_backup": (drivers.backup,),
-            "drivers_placa": (drivers.instalar_placa_indice, int(parametro or 0)),
-            "maker_portas": (maker.portas,),
-            "maker_seriais": (maker.seriais,),
-            "maker_acao": (self._maker_acao, dict(parametro or {})),
-            "rgb_conectar": (lambda progresso: rgb.instancia().conectar(progresso),),
-            "rgb_sdk": (rgb.baixar_sdk_corsair,),
+            "rede": lambda: (rede.testar,),
+            "disco": lambda: (discos.testar_velocidade, str(p or ""), 1024),
+            "carregamento": lambda: (discos.testar_carregamento, str(p or "")),
+            "saude_discos": lambda: (lambda progresso: discos.saude(),),
+            "energia": lambda: (lambda progresso: energia.ler(),),
+            "limpeza": lambda: (lambda progresso: otimizacao.limpar_memoria(),),
+            "sistema": lambda: (lambda progresso: sistema.coletar(),),
+            "gpu": lambda: (lambda progresso: gpu.coletar(),),
+            "apps": lambda: (apps.instalar, list(p or [])),
+            "pawnio": lambda: (sensores.instalar_pawnio,),
+            "windhawk": lambda: (windhawk.instalar,),
+            "relatorio": lambda: (self._gerar_relatorio, str(p or "html")),
+            "saude": lambda: (lambda progresso: saude.checklist(self._sensores.leitura(False)["diagnostico"]),),
+            "drivers": lambda: (lambda progresso, q: drivers.estado(progresso, bool(q.get("forcar")), bool(q.get("studio"))),
+                                dict(p or {})),
+            "drivers_wu": lambda: (drivers.windows_update_buscar,),
+            "drivers_wu_instalar": lambda: (lambda progresso, ids: drivers.windows_update_instalar(ids, progresso),
+                                            [str(i) for i in (p or [])]),
+            "drivers_backup": lambda: (drivers.backup,),
+            "drivers_placa": lambda: (drivers.instalar_placa_indice, int(p or 0)),
+            "maker_portas": lambda: (maker.portas,),
+            "maker_seriais": lambda: (maker.seriais,),
+            "maker_acao": lambda: (self._maker_acao, dict(p or {})),
+            "rgb_conectar": lambda: (lambda progresso: rgb.instancia().conectar(progresso),),
+            "rgb_sdk": lambda: (rgb.baixar_sdk_corsair,),
         }
         if nome not in funcoes:
             return False
-        funcao, *args = funcoes[nome]
+        try:
+            funcao, *args = funcoes[nome]()
+        except (TypeError, ValueError):
+            log.warning("tarefa %s com parâmetro inválido: %r", nome, parametro)
+            return False
         return self._tarefas[nome].iniciar(funcao, *args)
 
     def estado_tarefa(self, nome):
@@ -723,10 +730,14 @@ class Api:
     def ram_bios_aplicar(self, mudancas, origem=""):
         if ram_timings.em_uso():
             return {"ok": False, "mensagem": "Espere o teste de estabilidade terminar."}
+        if (ram_auto._ler_diario() or {}).get("fase") not in (None, "ocioso", "final", "pausado"):
+            return {"ok": False, "mensagem": "O auto-tune está rodando. Pause ou cancele antes de gravar à mão."}
         atual = ram_timings.leitura_atual()
         return aod.aplicar(dict(mudancas or {}), (atual.get("timings") if atual.get("ok") else None), str(origem or ""))
 
     def ram_bios_restaurar(self, modo="antes"):
+        if (ram_auto._ler_diario() or {}).get("fase") not in (None, "ocioso", "final", "pausado"):
+            return {"ok": False, "mensagem": "O auto-tune está rodando. Use \"Cancelar e voltar ao que era\" nele."}
         return aod.restaurar("padrao" if modo == "padrao" else "antes")
 
     def ram_bios_reiniciar(self):
@@ -736,8 +747,13 @@ class Api:
     def ram_auto_estado(self):
         return ram_auto.estado()
 
-    def ram_auto_iniciar(self, niveis=None):
-        return ram_auto.iniciar(niveis)
+    def ram_auto_plano(self, forcar=False):
+        return ram_auto.plano(bool(forcar))
+
+    def ram_auto_iniciar(self, opcoes=None):
+        if ram_timings.em_uso():
+            return {"ok": False, "mensagem": "Espere o teste de estabilidade terminar."}
+        return ram_auto.iniciar(opcoes if isinstance(opcoes, dict) else {})
 
     def ram_auto_pausar(self):
         return ram_auto.pausar()
@@ -753,6 +769,9 @@ class Api:
 
     def ram_auto_relatorio(self):
         return ram_auto.relatorio()
+
+    def ram_auto_dispensar(self):
+        return ram_auto.dispensar()
 
     def oc_erros(self):
         return oc.erros_recentes()

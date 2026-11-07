@@ -114,6 +114,14 @@ o monitor abre um painel mais simples automaticamente.
   próximo boot, guarda os valores de antes para desfazer, tem a volta ao padrão da BIOS e, depois de reiniciar,
   confere pelo controlador se tudo entrou e se o PC desligou sem avisar. O que a BIOS não oferece pelo Windows (na
   placa testada, o tREFI) continua só na BIOS.
+  **Auto-tune**: lê o kit (chip e densidade pelo SPD, ranks, quantos pentes, perfil de fábrica, timings e tensão
+  atuais, sensor de temperatura) e monta um plano com o piso de cada timing para aquele chip. Depois acha o limite
+  real do kit sozinho: tensão, tRFC (com busca fina no fim), CL, tRCD/tRP, tRAS/tRC, secundários em degraus, tREFI
+  (se a BIOS deixar e houver sensor) e FCLK, cada um em busca binária, com um reinício e um teste de estabilidade por
+  tentativa. Percebe quando o PC travou ou quando a placa voltou ao padrão no treino, segue com o último valor bom e
+  para depois de 3 boots ruins seguidos. No fim roda o teste longo; se achar erro, afrouxa um passo em cada timing e
+  testa de novo. Continua sozinho depois de cada reinício por uma tarefa de logon como administrador, apagada no fim.
+  Modos Rápido e Completo e a opção de deixar um passo de folga.
   Depois de mudar, o **teste de estabilidade** (5 a 60 min, grava e confere toda a memória livre com padrões feitos
   para pegar timing apertado, mais os erros de hardware do Windows e a temperatura dos pentes) e a medição de
   latência e banda dizem se ficou estável e quanto ganhou. Cada teste fica no histórico com os timings daquele
@@ -304,6 +312,7 @@ O `memteste.dll` do pacote foi compilado a partir do `.c`; para gerar de novo, u
 - `monitor_lentidao/oc_cpu.py`, `oc_ryzen.py` e `oc_intel.py`: aba Processador e o ajuste automático
 - `monitor_lentidao/pawnio.py` e `nativo/pawnio/`: acesso ao driver PawnIO e os módulos assinados dele
 - `monitor_lentidao/ram_timings.py`: aba Timings da RAM (kit, SPD, controlador de memória, análise, sugestões e teste)
+- `monitor_lentidao/ram_auto.py`: auto-tune da RAM (análise do kit, busca timing por timing, teste final, diário entre reinícios)
 - `monitor_lentidao/aod.py`: gravação dos timings na BIOS pela interface AOD da AMD (próximo boot)
 - `monitor_lentidao/atualizador.py`: atualização sozinha pela release do GitHub
 - `nativo/estavel.c`: testes de estabilidade do processador (por núcleo) e da RAM (timings)

@@ -224,6 +224,10 @@ def _ler_spd() -> list[dict]:
                     return False
 
             guardar("indice", lambda: int(ac.Index))
+            # organização do pente (a biblioteca decodifica do SPD): ranks, densidade e largura de cada chip
+            guardar("ranks", lambda: int(ac.GetRanks()))
+            guardar("densidade_die", lambda: str(ac.GetDensityPerDie()))
+            guardar("largura_chip", lambda: str(ac.GetDeviceWidth()))
             guardar("tipo", lambda: _nome(ac.MemoryType()))
             if pagina(PageData.ModulePartNumber):
                 guardar("modelo", lambda: str(ac.ModulePartNumber()).strip().strip("\x00").strip())
