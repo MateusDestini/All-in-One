@@ -200,7 +200,10 @@ def resumo_spd(item: dict, tipo: str) -> dict:
     t = item.get("tempos") or {}
     tipo = tipo or ("DDR5" if "DDR5" in (item.get("tipo") or "") else "DDR4" if "DDR4" in (item.get("tipo") or "") else "")
     saida = {"fabricante_chip": fabricante_do_chip(item.get("fabricante_chip") or ""), "modelo": item.get("modelo") or "",
-             "gbit": densidade_gbit(tipo, t.get("trfc1")), "trfc1_ns": t.get("trfc1"), "tipo": tipo}
+             "gbit": densidade_gbit(tipo, t.get("trfc1")) or _numero_gbit(item.get("densidade_die")),
+             "trfc1_ns": t.get("trfc1"), "tipo": tipo,
+             "ranks": item.get("ranks") if isinstance(item.get("ranks"), int) and 1 <= item["ranks"] <= 4 else None,
+             "largura": _numero(item.get("largura_chip"), (4, 8, 16))}
     tck = t.get("tck")
     if tck and 0.15 <= tck <= 2.0:
         mts = 2000 / tck
@@ -211,6 +214,24 @@ def resumo_spd(item: dict, tipo: str) -> dict:
         ciclos = {k: math.ceil(t[k] / ck - 0.01) for k in ("taa", "trcd", "trp") if t.get(k)}
         saida.update(base_mts=mts, base_cl=ciclos.get("taa"), base_trcd=ciclos.get("trcd"), base_trp=ciclos.get("trp"))
     return saida
+
+
+def _numero(texto, validos) -> int | None:
+    """Primeiro número de um texto que a biblioteca devolveu (enum ou número), se for um dos válidos."""
+    m = re.search(r"\d+", str(texto or ""))
+    v = int(m.group()) if m else None
+    return v if v in validos else None
+
+
+def _numero_gbit(texto) -> int | None:
+    """Densidade de cada chip: a biblioteca pode dar em Gbit, Mbit ou como nome do enum (ex.: "_16Gb")."""
+    m = re.search(r"\d+", str(texto or ""))
+    if not m:
+        return None
+    v = int(m.group())
+    if v >= 1024:
+        v //= 1024
+    return v if v in (4, 8, 12, 16, 24, 32, 48, 64) else None
 
 
 def chip_do_spd(spd: dict, kit: dict | None, pente: dict) -> dict | None:
@@ -296,7 +317,7 @@ def _kit(spd: list[dict] | None = None) -> dict:
     resumo = {"tipo": tipo, "quantidade": len(lista), "gb_pente": base["gb"], "gb_total": sum(p["gb"] for p in lista),
               "marca": d.get("marca") or base["fabricante"], "modelo": base["modelo"], "perfil_mts": perfil_mts,
               "perfil_cl": d.get("cl"), "perfil_trcd": d.get("trcd"), "perfil_trp": d.get("trp"), "oem": bool(d.get("oem")),
-              "atual_mts": base["atual"], "ranks": base.get("ranks"), "chip": base["chip"], "iguais": iguais,
+              "atual_mts": base["atual"], "ranks": (base.get("spd") or {}).get("ranks") or base.get("ranks"), "chip": base["chip"], "iguais": iguais,
               "tensao": base.get("tensao"), "conhecido": bool(d and d.get("fonte") == "codigo"), "spd": base.get("spd")}
     return {"pentes": lista, "resumo": resumo}
 

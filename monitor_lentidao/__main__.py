@@ -50,6 +50,7 @@ def main() -> None:
     parser.add_argument("--aguardar", action="store_true", help=argparse.SUPPRESS)  # reaberto como administrador
     parser.add_argument("--sensores", action="store_true", help=argparse.SUPPRESS)  # processo de sensores
     parser.add_argument("--aplicar-perfil-gpu", action="store_true", help=argparse.SUPPRESS)  # tarefa do logon
+    parser.add_argument("--ram-auto", action="store_true", help=argparse.SUPPRESS)  # tarefa do auto-tune da RAM
     parser.add_argument("--segundos", type=int, default=60, help="duração da coleta no diagnóstico")
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args()
@@ -78,7 +79,17 @@ def main() -> None:
         diagnostico(cfg, args.segundos)
         return
 
-    if not (windows.aguardar_instancia() if args.aguardar else windows.instancia_unica()):
+    if args.bandeja and not args.ram_auto:
+        from . import ram_auto
+        if ram_auto.deve_ceder_ao_iniciar():
+            # auto-tune da RAM em andamento: quem continua é a cópia administradora aberta pela tarefa de logon
+            logging.info("auto-tune da RAM em andamento: deixando a tarefa de logon abrir o monitor como administrador")
+            return
+
+    if not (windows.aguardar_instancia(60) if (args.aguardar or args.ram_auto) else windows.instancia_unica()):
+        if args.ram_auto:
+            logging.warning("auto-tune da RAM: outra cópia do monitor (sem administrador?) está aberta")
+            return
         windows.mensagem("Monitor de Lentidão", "O monitor já está rodando. Procure o ícone perto do relógio.")
         return
 

@@ -124,9 +124,25 @@ class App:
             self._ultimo_aparo = time.time()
             windows.aparar_memoria()
 
+    def _ram_auto(self) -> None:
+        """Avança o auto-tune da RAM (a cada 15 s, numa thread: ele pode reiniciar o PC ou rodar PowerShell)."""
+        if time.time() - getattr(self, "_ram_auto_em", 0) < 15:
+            return
+        self._ram_auto_em = time.time()
+
+        def passo():
+            try:
+                msg = ram_auto.tick()
+                if msg:
+                    self.notificar("Auto-tune da RAM", msg)
+            except Exception:
+                log.exception("falha no auto-tune da RAM")
+        threading.Thread(target=passo, daemon=True, name="ram-auto").start()
+
     def _perfil_gpu(self) -> None:
         """Nos primeiros 15 minutos: avisa o que aconteceu com os perfis aplicados no logon e com o ajuste automático
         do processador, se o PC reiniciou no meio dele."""
+        self._ram_auto()
         if time.time() - self._inicio > 900:
             return
         if not getattr(self, "_queda_cpu_vista", False):
@@ -134,15 +150,6 @@ class App:
             texto = oc_cpu.verificar_queda()
             if texto:
                 self.notificar("Ajuste automático do processador", texto + " Ele está na aba Processador do painel.")
-        # Verifica estado do auto-tune da RAM após reboot
-        if not getattr(self, "_ram_auto_visto", False):
-            self._ram_auto_visto = True
-            try:
-                msg_ram = ram_auto.verificar_estado()
-                if msg_ram:
-                    self.notificar("Auto-tune da RAM", msg_ram + " Abra o painel para continuar.")
-            except Exception:
-                pass
         r = oc.resultado_inicio()
         if r:
             self.notificar("Overclock aplicado ao iniciar", r["texto"])

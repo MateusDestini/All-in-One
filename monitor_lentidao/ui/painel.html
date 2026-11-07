@@ -634,11 +634,24 @@
   .ram-resultado { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); }
   .ram-resultado.ok { border-color: var(--ok); } .ram-resultado.ruim { border-color: var(--critico); }
   tr.ram-melhor td { background: var(--card2); }
+  .ra-caixa { border-color: var(--accent); }
+  .ra-fatos { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 12px 0; }
+  .ra-fatos > div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .ra-fatos span { display: block; font-size: 11.5px; color: var(--dim); }
+  .ra-fatos b { font-size: 13.5px; }
+  table.ra-etapas td, table.ra-etapas th { text-align: left !important; }
+  table.ra-etapas td { font-family: inherit; } table.ra-etapas td.num { font-family: var(--mono); }
+  .ra-ok { color: var(--ok); font-weight: 700; } .ra-ruim { color: var(--critico); font-weight: 700; }
+  .ra-passos { display: grid; gap: 6px; margin: 12px 0; }
+  .ra-passo { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+  .ra-passo .mk { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); }
+  .ra-passo.feita .mk { background: var(--ok); border-color: var(--ok); }
+  .ra-passo.atual .mk { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .ra-passo .val { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+  .ra-op { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .ra-op label { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
   @media (max-width: 1250px) { .teste-cpu { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 </style>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 </head>
 <body>
 <div class="app">
@@ -1368,15 +1381,6 @@
 </div>
 
 <script>
-// DECLARAÇÃO GLOBAL PRÉ-PARSE: elimina TDZ definitivamente
-var ramBios = null;
-var ramBiosNovo = {};
-var ramBiosCarregando = false;
-var ramBiosOrigem = '';
-var ramBiosTurnaround = false;
-</script>
-<script data-v="1793937522">
-// Variáveis já declaradas no bloco pré-parse acima
 const api = () => window.pywebview.api;
 const COR = { ok: "var(--ok)", aviso: "var(--aviso)", critico: "var(--critico)" };
 const historicoMedidores = {};
@@ -3608,6 +3612,9 @@ async function atualizarCpu() {
 
 // ----- timings da RAM
 let ramDados = null, ramCarregando = false;
+// gravação na BIOS (AOD)
+let ramBios = null, ramBiosNovo = {}, ramBiosCarregando = false, ramBiosOrigem = "", ramBiosTurnaround = false;
+let ramAuto = null;
 const ramEscolha = { min: 15 };
 const NOMES_T = { cl: "CL", trcd: "tRCD", trp: "tRP", tras: "tRAS", trc: "tRC", trcdwr: "tRCDWR", trrds: "tRRDS", trrdl: "tRRDL", tfaw: "tFAW",
   twtrs: "tWTRS", twtrl: "tWTRL", twr: "tWR", trtp: "tRTP", tcwl: "tCWL", trdrdscl: "tRDRDSCL", twrwrscl: "tWRWRSCL", trdwr: "tRDWR", twrrd: "tWRRD",
@@ -3622,7 +3629,12 @@ async function carregarRam(forcar) {
   if (ramCarregando) return;
   ramCarregando = true;
   if (forcar) document.getElementById("ram-conteudo").innerHTML = `<div class="vazio">Lendo os pentes e o controlador de memória...</div>`;
-  try { ramDados = await api().ram_estado(!!forcar); renderRam(); setTimeout(function(){ try { if (typeof carregarRamBios === "function") carregarRamBios(); } catch(e){ console.error(e); } }, 50); }
+  try {
+    ramDados = await api().ram_estado(!!forcar);
+    renderRam();
+    if (!ramBios || forcar) carregarRamBios(!!forcar);
+    atualizarRamAuto();
+  }
   catch (e) { console.error(e); document.getElementById("ram-conteudo").innerHTML = `<div class="vazio">Não consegui ler a memória: ${esc(String(e))}</div>`; }
   finally { ramCarregando = false; }
 }
@@ -3652,25 +3664,24 @@ function renderRam() {
   el.innerHTML = `<div class="oc-grade">${juntos ? `<div class="ram-col">${kitHtml}${diag}</div>` : kitHtml}<div class="caixa"><h3>Rodando agora</h3>${atualRamHtml(a, r, plat)}</div></div>
     ${!juntos && diag ? `<div style="margin-top:14px">${diag}</div>` : ""}
     ${analiseRamHtml(d.analise)}
-    <div id="ram-auto-banner" style="display:none;margin-bottom:18px"></div>
+    <div class="tit-secao"><h2>Auto-tune</h2><span class="sub">acha sozinho o limite do seu kit, timing por timing</span></div>
+    <div id="ram-auto-banner">${ramAutoBannerHtml(ramAuto)}</div>
     <div class="tit-secao"><h2>Sugestões para a BIOS</h2><span class="sub">${d.latencia_medida ? `Estimativas a partir da sua latência medida (${fmtN(d.latencia_medida)} ns).` : "Rode o teste abaixo para as estimativas usarem a sua latência medida."}</span></div>
     <div class="sub" style="line-height:1.55;margin:-4px 0 12px">Os timings só mudam na BIOS. Antes, salve o perfil atual dela (Save Profile). Mude um nível por vez e teste aqui. Se o PC não ligar, espere: a placa tenta algumas vezes e volta sozinha; se não voltar, limpe a CMOS.</div>
     <div class="ram-niveis">${(d.sugestoes.niveis || []).map(nivelRamHtml).join("")}</div>
     <div class="tit-secao"><h2>Gravar na BIOS pelo Windows</h2><span class="sub">como o Ryzen Master: vale no próximo boot</span></div>
-    <div id="ram-bios"><div class="vazio">Carregando ajustes da BIOS...</div></div>
+    <div id="ram-bios">${ramBiosHtml()}</div>
     <div class="tit-secao"><h2>Testar a configuração atual</h2></div>
     <div class="caixa" id="ram-teste">${testeRamHtml()}</div>
     <div id="ram-hist">${historicoRamHtml()}</div>`;
 }
-  // Renderiza banner do auto-tune se ativo
-  api().ram_auto_estado().then(auto => {
-    const banner = document.getElementById('ram-auto-banner');
-    if (banner) {
-      const html = ramAutoBannerHtml(auto);
-      if (html) { banner.style.display = 'block'; banner.innerHTML = html; }
-      else { banner.style.display = 'none'; banner.innerHTML = ''; }
-    }
-  }).catch(() => {});
+// banner do auto-tune: lido junto com a página e a cada volta do laço da aba
+async function atualizarRamAuto() {
+  try { ramAuto = await api().ram_auto_estado(); }
+  catch (e) { console.error(e); return; }
+  const el = document.getElementById("ram-auto-banner");
+  if (el && !el.contains(document.activeElement)) el.innerHTML = ramAutoBannerHtml(ramAuto);
+}
 function analiseRamHtml(an) {
   if (!an || !an.itens || !an.itens.length) return "";
   const c = an.contagem || {};
@@ -3904,64 +3915,127 @@ function copiarNivelRam(id) {
 }
 
 // ------------------------------------------------------------------ Auto-tune de RAM
-let _ramAutoTimer = null;
-const FASES_RAM = {planejamento:"Planejando",aplicar:"Gravando na BIOS",aguardando_boot:"Reiniciando…",teste:"Testando estabilidade",decisao:"Analisando resultado",final:"Concluído",pausado:"Pausado",ocioso:""};
+let ramAutoPlano = null, ramAutoPlanoCarregando = false;
+const ramAutoOp = { modo: "rapido", margem: false };
+const FASES_RAM = { aplicar: "Gravando na BIOS", aguardando_boot: "Reiniciando", teste: "Testando", final: "Concluído", pausado: "Pausado" };
+const MOTIVOS_RAM = { crash_ou_no_post: "o PC travou ou não ligou", timings_nao_entrou: "a placa recusou no treino",
+  timings_parcial: "a placa aceitou só uma parte", instavel: "erros no teste", temperatura_alta: "pentes quentes demais",
+  travou_no_teste: "travou no teste", bios_recusou: "a BIOS recusou o valor" };
 
-async function ramAutoIniciar() {
-  confirmar("Iniciar auto-tune completo?",
-    "O programa vai gravar perfis progressivamente mais agressivos na BIOS, reiniciar o PC automaticamente e testar estabilidade ao voltar. Se algum perfil falhar, reverte sozinho para o último estável. Duração estimada: 2–3 horas. Não use o PC durante o teste. Cancelar a qualquer momento reverte tudo.",
-    "Iniciar auto-tune", async () => {
-      const r = await api().ram_auto_iniciar();
+async function carregarRamAutoPlano(forcar) {
+  if (ramAutoPlanoCarregando) return;
+  ramAutoPlanoCarregando = true;
+  try { ramAutoPlano = await api().ram_auto_plano(!!forcar); }
+  catch (e) { console.error(e); ramAutoPlano = { ok: false, motivo: String(e) }; }
+  finally { ramAutoPlanoCarregando = false; }
+  const el = document.getElementById("ram-auto-banner");
+  if (el) el.innerHTML = ramAutoBannerHtml(ramAuto);
+}
+function ramAutoIniciar() {
+  const p = ramAutoPlano || {}, min = (p.minutos || {})[ramAutoOp.modo];
+  confirmar("Começar o auto-tune?",
+    `O monitor vai gravar valores na BIOS, reiniciar o PC sozinho e testar a cada volta, umas ${p.tentativas_estimadas || "?"} vezes (cerca de ${min ? fmtDuracao(min) : "algumas horas"}). Salve o que estiver aberto e não use o PC enquanto isso. Se um valor não aguentar, a placa pode demorar para ligar ou voltar sozinha ao padrão: o auto-tune percebe e segue com o último valor bom. Se o PC não ligar de jeito nenhum, limpe a CMOS.`,
+    "Começar e reiniciar", async () => {
+      const r = await api().ram_auto_iniciar({ modo: ramAutoOp.modo, margem: ramAutoOp.margem });
       toast(r.mensagem);
-      if (r.ok) carregarRam(true);
+      if (r.ok) atualizarRamAuto();
     });
 }
-async function ramAutoPausar() {
-  const r = await api().ram_auto_pausar(); toast(r.mensagem); carregarRam(true);
+const volts = mv => `${(mv / 1000).toFixed(2).replace(".", ",")} V`;
+function fmtDuracao(min) {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
 }
-async function ramAutoCancelar() {
-  confirmar("Cancelar e reverter?", "Reverte todos os timings para o estado original e para o auto-tune.", "Cancelar e reverter", async () => {
+async function ramAutoPausar() { const r = await api().ram_auto_pausar(); toast(r.mensagem); atualizarRamAuto(); }
+function ramAutoCancelar() {
+  confirmar("Cancelar e voltar ao que era antes?", "Para o auto-tune e grava na BIOS os valores de antes dele. Vale depois de reiniciar.", "Cancelar e voltar", async () => {
     const r = await api().ram_auto_cancelar(); toast(r.mensagem); carregarRam(true);
   });
 }
-async function ramAutoContinuar() {
-  const r = await api().ram_auto_continuar(); toast(r.mensagem); carregarRam(true);
-}
-async function ramAutoPular() {
-  const r = await api().ram_auto_pular(); toast(r.mensagem); carregarRam(true);
+async function ramAutoContinuar() { const r = await api().ram_auto_continuar(); toast(r.mensagem); atualizarRamAuto(); }
+async function ramAutoPular() { const r = await api().ram_auto_pular(); toast(r.mensagem); atualizarRamAuto(); }
+async function ramAutoDispensar() { await api().ram_auto_dispensar(); ramAuto = null; carregarRam(true); }
+
+function ramAutoPlanoHtml() {
+  const p = ramAutoPlano;
+  if (!p) { if (!ramAutoPlanoCarregando) setTimeout(() => carregarRamAutoPlano(false), 0);
+    return `<div class="caixa"><div class="vazio">Analisando o kit para montar o plano...</div></div>`; }
+  if (!p.ok) return `<div class="caixa"><div class="sub" style="line-height:1.55">${esc(p.motivo || "O auto-tune não está disponível neste PC.")}</div>
+    <div class="oc-acoes"><button class="botao" onclick="carregarRamAutoPlano(true)">Analisar de novo</button></div></div>`;
+  const k = p.kit || {};
+  const fato = (rot, val) => val ? `<div><span>${rot}</span><b>${esc(String(val))}</b></div>` : "";
+  const gb = k.quantidade && k.gb_pente ? `${k.quantidade} × ${k.gb_pente} GB` : "";
+  const fatos = [fato("Kit", [k.marca, gb].filter(Boolean).join(" · ")), fato("Perfil de fábrica", k.perfil),
+    fato(k.chip_spd ? "Chip (lido do pente)" : "Chip provável", k.chip), fato("Densidade do chip", k.gbit ? `${k.gbit} Gbit${k.largura ? ` · x${k.largura}` : ""}` : ""),
+    fato("Ranks", k.ranks ? (k.ranks > 1 ? `${k.ranks} (dual rank)` : "1 (single rank)") : ""), fato("Rodando agora", k.rodando),
+    fato("tRFC agora", k.trfc_ns ? `${k.trfc_ns} ns` : ""), fato("Tensão (VDD)", k.vdd ? volts(k.vdd) : ""),
+    fato("Velocidade alvo", p.alvo_mts ? `${p.alvo_mts} MT/s` : ""), fato("Sensor de temperatura", k.sensor_temperatura ? "sim" : "não")].join("");
+  const valor = (e, x) => typeof x === "object" ? Object.entries(x).map(([c, v]) => (c === "vdd" || c === "vddq") ? `${c.toUpperCase()} ${volts(v)}` : `${NOMES_T[c] || c} ${v}`).join(", ") || "como está" : x;
+  const linhas = (p.etapas || []).map(e => `<tr><td><b>${esc(e.nome)}</b><div class="sub" style="margin-top:2px">${esc(e.texto || "")}</div></td>
+      <td class="num">${esc(String(valor(e, e.atual)))}</td><td class="num">${esc(String(valor(e, e.piso)))}</td><td class="num">${e.tentativas_est}</td></tr>`).join("");
+  const avisos = (p.avisos || []).map(a => `<div class="achado"><span class="ponto aviso" style="margin-top:7px;flex:none"></span><div class="sub" style="line-height:1.5">${esc(a)}</div></div>`).join("");
+  const min = p.minutos || {};
+  return `<div class="caixa ra-caixa">
+    <h3>O que o auto-tune leu do seu kit</h3>
+    <div class="ra-fatos">${fatos}</div>
+    <div class="sub" style="line-height:1.55">Pisos de <b>${esc(p.pisos_nome)}</b> (${esc(p.escala)}). O piso é até onde a busca vai, não o alvo: cada timing desce em busca binária a partir do valor de agora, com um reinício e um teste de estabilidade por tentativa. O que falhar volta para o último valor bom.</div>
+    ${avisos ? `<div style="margin-top:10px">${avisos}</div>` : ""}
+    ${linhas ? `<table class="aida ra-etapas" style="margin-top:12px"><tr><th>Etapa</th><th>Agora</th><th>Até</th><th>Tentativas</th></tr>${linhas}</table>`
+      : `<div class="sub" style="margin-top:10px">Nada para apertar: os timings já estão no piso deste chip. O auto-tune só confirmaria a estabilidade.</div>`}
+    <div class="ra-op">
+      <div class="segmentos peq" style="display:inline-flex">${Object.entries({ rapido: "Rápido", completo: "Completo" }).map(([m, rot]) =>
+        `<button class="${ramAutoOp.modo === m ? "ativo" : ""}" onclick="ramAutoOp.modo='${m}';document.getElementById('ram-auto-banner').innerHTML=ramAutoBannerHtml(ramAuto)">${rot}${min[m] ? ` · ~${fmtDuracao(min[m])}` : ""}</button>`).join("")}</div>
+      <label><input type="checkbox" ${ramAutoOp.margem ? "checked" : ""} onchange="ramAutoOp.margem=this.checked"> Deixar um passo de folga em cada timing</label>
+    </div>
+    <div class="sub" style="margin-top:8px;line-height:1.5">${ramAutoOp.modo === "rapido" ? "Rápido: 4 min por tentativa e 20 min no teste final." : "Completo: 8 min por tentativa e 1 hora no teste final. Pega erros que só aparecem com o tempo."} No fim, se o teste final achar erro, ele afrouxa um passo em cada timing e testa de novo.</div>
+    <div class="oc-acoes"><button class="botao primario" onclick="ramAutoIniciar()" ${ramOcupado() ? "disabled" : ""}>Começar auto-tune</button>
+      <button class="botao" onclick="carregarRamAutoPlano(true)">Analisar de novo</button></div>
+  </div>`;
 }
 
 function ramAutoBannerHtml(auto) {
-  if (!auto || auto.fase === "ocioso") return "";
+  if (!auto || auto.fase === "ocioso") return ramAutoPlanoHtml();
   const fase = FASES_RAM[auto.fase] || auto.fase;
-  const nivel = auto.nivel_atual ? auto.nivel_atual.charAt(0).toUpperCase() + auto.nivel_atual.slice(1) : "";
-  const progresso = auto.fila && auto.nivel_atual ? Math.round(((auto.fila.indexOf(auto.nivel_atual)) / auto.fila.length) * 100) : 0;
+  const pct = Math.round((auto.progresso || 0) * 100);
+  const t = auto.tentativa || {};
+  const nomeEtapa = (auto.etapas_resumo || []).find(e => e.id === t.etapa)?.nome || (t.etapa === "final" ? "Teste final" : "");
+  const valores = v => v && Object.keys(v).length ? Object.entries(v).map(([c, x]) => (c === "vdd" || c === "vddq") ? `${c.toUpperCase()} ${volts(x)}` : `${NOMES_T[c] || c.toUpperCase()} ${x}`).join(", ") : "";
   let detalhe = "";
-  if (auto.fase === "teste" && auto.teste && auto.teste.rodando) {
-    detalhe = `${auto.teste.etapa} · ${Math.round(auto.teste.progresso * 100)}%`;
-  } else if (auto.fase === "aguardando_boot") {
-    detalhe = "O PC vai reiniciar agora. Não desligue.";
-  } else if (auto.fase === "pausado" && auto.pausa) {
-    detalhe = auto.pausa.motivo;
-  } else if (auto.fase === "final") {
-    const rel = auto.resultados || {};
-    const estaveis = Object.entries(rel).filter(([,v]) => v && v.estavel).length;
-    detalhe = `${estaveis} perfil(is) estável(is) encontrado(s).`;
+  if (auto.fase === "teste" && auto.teste && auto.teste.rodando) detalhe = `${nomeEtapa}${valores(t.valores) ? `: ${valores(t.valores)}` : ""} · ${auto.teste.etapa} · ${Math.round(auto.teste.progresso * 100)}%${auto.teste.erros ? ` · ${auto.teste.erros} erros` : ""}${auto.teste.temp_agora ? ` · pentes a ${Math.round(auto.teste.temp_agora)} °C` : ""}`;
+  else if (auto.fase === "aguardando_boot") detalhe = `${nomeEtapa}${valores(t.valores) ? `: ${valores(t.valores)}` : ""}. O PC reinicia em instantes. Não desligue: o boot pode ficar 1 a 2 minutos com a tela preta enquanto a placa treina a memória.`;
+  else if (auto.fase === "pausado" && auto.pausa) detalhe = auto.pausa.motivo;
+  else if (auto.fase === "teste") detalhe = `${nomeEtapa}: preparando o teste...`;
+  const passos = auto.fase === "final" ? "" : `<div class="ra-passos">${(auto.etapas_resumo || []).map(e => `<div class="ra-passo ${e.estado}"><span class="mk"></span><span>${esc(e.nome)}</span>
+      <span class="val">${e.estado === "espera" ? esc(e.inicio) : esc(e.melhor)}</span></div>`).join("")}
+      <div class="ra-passo ${t.etapa === "final" ? "atual" : ""}"><span class="mk"></span><span>Teste final (${auto.modo === "completo" ? "1 hora" : "20 min"})</span><span class="val"></span></div></div>`;
+  const tent = (auto.tentativas || []).slice(-8).reverse().map(x => `<tr><td>${esc((auto.etapas_resumo || []).find(e => e.id === x.etapa)?.nome || (x.etapa === "final" ? "Teste final" : x.etapa))}</td>
+      <td class="num">${esc(valores(x.valores) || "—")}</td><td><span class="${x.ok ? "ra-ok" : "ra-ruim"}">${x.ok ? "passou" : "falhou"}</span>${!x.ok && x.motivo ? ` <span class="sub">${esc(MOTIVOS_RAM[x.motivo] || x.motivo)}</span>` : ""}</td>
+      <td class="num">${x.latencia ? `${fmtN(x.latencia)} ns` : ""}</td></tr>`).join("");
+  let final = "";
+  if (auto.fase === "final") {
+    const mudou = Object.entries(auto.mudou || {});
+    const ini = auto.inicial || {}, fim = auto.final_medida || {};
+    final = auto.ok_final
+      ? `<div class="sub" style="line-height:1.55">${mudou.length ? `Ficou gravado na BIOS: <b>${esc(valores(auto.mudou))}</b>.` : "Nada mudou: o kit já estava no limite."}
+         ${ini.latencia && fim.latencia ? ` Latência de <b>${fmtN(ini.latencia)}</b> para <b>${fmtN(fim.latencia)} ns</b>${ini.leitura && fim.leitura ? `, leitura de ${fmtN(ini.leitura)} para ${fmtN(fim.leitura)} GB/s` : ""}.` : ""}
+         Passou ${auto.modo === "completo" ? "1 hora" : "20 minutos"} de teste sem erro. Para uso pesado, rode mais 1 hora no teste abaixo de vez em quando.</div>`
+      : `<div class="sub" style="line-height:1.55">Nenhuma configuração passou no teste final. A BIOS voltou ao que era antes do auto-tune.</div>`;
   }
   const botoes = auto.fase === "pausado"
-    ? `<button class="botao primario" onclick="ramAutoContinuar()">Continuar</button><button class="botao" onclick="ramAutoPular()">Pular nível</button>`
-    : auto.fase === "final"
-    ? `<button class="botao" onclick="carregarRam(true)">Ver relatório</button>`
-    : `<button class="botao" onclick="ramAutoPausar()">Pausar</button><button class="botao" onclick="ramAutoPular()">Pular nível</button>`;
-  return `<div class="caixa" style="border-color:var(--accent);margin-bottom:18px">
+    ? `<button class="botao primario" onclick="ramAutoContinuar()">Continuar</button><button class="botao" onclick="ramAutoPular()">Pular esta etapa</button>`
+    : auto.fase === "final" ? `<button class="botao" onclick="ramAutoDispensar()">Fechar</button>`
+    : `<button class="botao" onclick="ramAutoPausar()">Pausar</button>${t.etapa && t.etapa !== "final" && t.etapa !== "base" ? `<button class="botao" onclick="ramAutoPular()">Pular esta etapa</button>` : ""}`;
+  return `<div class="caixa ra-caixa">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <h3 style="margin:0">Auto-tune: ${esc(nivel)}</h3>
+      <h3 style="margin:0">${auto.fase === "final" ? "Auto-tune concluído" : "Auto-tune em andamento"}</h3>
       <span class="chip">${esc(fase)}</span>
-      ${auto.reboots_realizados ? `<span class="sub" style="margin-left:auto">${auto.reboots_realizados} reboot(s)</span>` : ""}
+      <span class="sub" style="margin-left:auto">${(auto.tentativas || []).length} tentativa(s) · ${auto.reboots || 0} reinício(s)</span>
     </div>
     ${detalhe ? `<div class="sub" style="margin-bottom:10px;line-height:1.5">${esc(detalhe)}</div>` : ""}
-    <div class="barra"><div class="trilho"><div class="enche" style="width:${progresso}%"></div></div></div>
-    <div class="oc-acoes" style="margin-top:12px">${botoes}<button class="botao perigo" onclick="ramAutoCancelar()">Cancelar e reverter</button></div>
+    ${auto.fase !== "final" ? `<div class="barra"><div class="trilho"><div class="enche" style="width:${pct}%"></div></div></div>` : ""}
+    ${final}${passos}
+    ${tent ? `<details class="ram-bios-mais" ${auto.fase === "final" ? "open" : ""}><summary>Tentativas</summary><table class="aida ra-etapas"><tr><th>Etapa</th><th>Valores</th><th>Resultado</th><th>Latência</th></tr>${tent}</table></details>` : ""}
+    <div class="oc-acoes" style="margin-top:12px">${botoes}<button class="botao perigo" onclick="ramAutoCancelar()">${auto.fase === "final" ? "Voltar ao que era antes" : "Cancelar e voltar ao que era"}</button></div>
   </div>`;
 }
 function testeRamHtml() {
@@ -4266,7 +4340,7 @@ function aoAbrirPagina(pag) {
   if (pag === "gargalo") lacoPagina("gargalo", atualizarGargalo, 1000, () => api().gargalo_sair());
   if (pag === "nvidia" || pag === "amd") { carregarOc(pag); lacoPagina(pag, async () => agoraOc(pag), 2000); }
   if (pag === "cpu") { carregarOc("cpu", true); lacoPagina("cpu", atualizarCpu, () => cpuOcupado() ? 1000 : 3000); }
-  if (pag === "ram") { carregarRam(); if (typeof ramBios === "undefined" || !ramBios) carregarRamBios(); lacoPagina("ram", atualizarRam, () => ramOcupado() ? 1000 : 4000); }
+  if (pag === "ram") { carregarRam(); lacoPagina("ram", async () => { await atualizarRam(); await atualizarRamAuto(); }, () => ramOcupado() ? 1000 : 4000); }
   if (pag === "overlay") lacoPagina("overlay", atualizarOverlay, 1000, () => api().overlay_acompanhar(false));
   if (pag === "jogos") carregarJogos();
   if (pag === "biblioteca") { carregarBiblioteca(); lacoPagina("biblioteca", atualizarRodando, 5000); }
